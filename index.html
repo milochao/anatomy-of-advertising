@@ -1,0 +1,2794 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>The Anatomy of Advertising</title>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+  html, body { margin: 0; padding: 0; background: #f4efe4; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useMemo, useRef } = React;
+
+// ============================================================
+// TRADITIONS — kept from prior. Used sparingly.
+// ============================================================
+const TRADITIONS = {
+  ethics:       { label: "Ethics & Rhetoric",     color: "#E27D2C" },
+  rational:     { label: "Rational Claim",        color: "#D6342B" },
+  emotional:    { label: "Emotional Craft",       color: "#1F3F8B" },
+  unconscious:  { label: "Unconscious",           color: "#A2418C" },
+  empirical:    { label: "Empirical Data",        color: "#2F8F4D" },
+  branding:     { label: "Brand Planning",        color: "#E2B12C" },
+  consumer:     { label: "Consumer Research",     color: "#A89867" },
+  behavioural:  { label: "Behavioural Economics", color: "#7A5538" },
+};
+const TRAD_ORDER = ["ethics","rational","emotional","unconscious","empirical","branding","consumer","behavioural"];
+
+// ============================================================
+// PORTRAITS — loaded from a sibling /portraits/ folder.
+// Falls back gracefully when a portrait is missing (Starch & Gallup,
+// non-debater stations, etc.). Drop in {id}.png to add new portraits.
+// ============================================================
+const PORTRAIT_BASE = "portraits";
+function portraitURL(id) { return `${PORTRAIT_BASE}/${id}.png`; }
+const PORTRAIT_AVAILABLE = new Set([
+  "aristotle","adams","bernays","barnum","hopkins","ogilvy","reeves",
+  "macmanus","bernbach","mcluhan","heath","wood","freud","dichter",
+  "packard","gossage","damasio","krugman","ehrenberg","sharp","romaniuk",
+  "binetfield","nelsonfield","king","pollitt","cialdini","thaler","ariely",
+  "kahneman","sutherland","feldwick",
+]);
+function hasPortrait(t) { return t && !t.kind && PORTRAIT_AVAILABLE.has(t.id); }
+
+const ROW_Y = {
+  ethics:140, rational:230, emotional:320, unconscious:410,
+  empirical:500, branding:590, consumer:680, behavioural:770,
+};
+const COL_X = {
+  bce:100, y1850:220, y1900:340, y1906:420, y1915:500, y1923:580,
+  y1928:660, y1929:740, y1930s:820, y1948:900, y1949:980, y1950:1060,
+  y1950s:1140, y1957:1220, y1959:1300, y1964:1380, y1965:1460, y1968:1540,
+  y1972:1620, y1984:1700, y1990s:1780, y1994:1860, y2001:1940, y2008:2020,
+  y2010:2100, y2011:2180, y2013:2260, y2019:2340, y2020:2420,
+};
+const VIEWBOX_W = 2740;
+const VIEWBOX_H = 940;
+
+// ============================================================
+// CONFIDENCE TIERS — primary-text reconstruction confidence
+// High: well-documented voice, prominent in training
+// Medium: documented positions, voice less distinctive
+// Low: figures with limited firsthand record on these questions
+// ============================================================
+const HIGH_CONFIDENCE = new Set([
+  "hopkins","bernbach","ogilvy","reeves","sharp","kahneman",
+  "cialdini","sutherland","heath","ariely","thaler","ehrenberg",
+]);
+const MEDIUM_CONFIDENCE = new Set([
+  "pollitt","king","krugman","damasio","mcluhan","dichter",
+  "packard","romaniuk","binetfield","nelsonfield","wood",
+]);
+function getConfidence(t) {
+  if (!t || t.kind) return null;
+  if (HIGH_CONFIDENCE.has(t.id)) return "high";
+  if (MEDIUM_CONFIDENCE.has(t.id)) return "medium";
+  return "low";
+}
+const CONFIDENCE_NOTES = {
+  high:   "Voice well-documented",
+  medium: "Voice approximated",
+  low:    "Voice largely reconstructed",
+};
+
+// ============================================================
+// KIND LABELS — for non-debater entries on the map
+// ============================================================
+const KIND_NOTES = {
+  ad:         "An advertisement, not a debater",
+  event:      "An event, not a debater",
+  instrument: "An instrument, not a debater",
+  pattern:    "A pattern, not a debater",
+};
+
+// ============================================================
+// THINKERS — locked corrections respected
+// ============================================================
+const THINKERS = [
+  { id:"aristotle", first:"Aristotle", last:"Aristotle", year:"350 BCE", col:"bce", tradition:"ethics",
+    bio:"Persuasion runs on three appeals. Ethos. Pathos. Logos. Every advertising argument since rests on this triangle, whether the practitioner names it or not." },
+  { id:"adams", first:"Samuel Hopkins", last:"Adams", year:"1906", col:"y1906", tradition:"ethics", interchange:true,
+    bio:"Wrote ten articles for Collier's naming the patent medicine industry's lies. Triggered the Pure Food and Drug Act in the same year. Ethics meets policy." },
+  { id:"bernays", first:"Edward", last:"Bernays", year:"1928", col:"y1928", tradition:"ethics",
+    bio:"Wrote Propaganda. Argued the engineering of consent was central to democratic society. Pepsodent belongs to Hopkins, not Bernays." },
+
+  { id:"barnum", first:"P.T.", last:"Barnum", year:"1850", col:"y1850", tradition:"rational",
+    bio:"Ran the American Museum on Broadway for 24 years. Spectacle drew the crowd. Attention was the asset. The Barnum Return pattern recurs every time a new medium arrives." },
+  { id:"hopkins", first:"Claude", last:"Hopkins", year:"1923", col:"y1923", tradition:"rational",
+    bio:"Applied mail-order measurement to FMCG retail brands. Coupons, traceable response, copy testing as discipline. He was not himself a mail-order practitioner. He brought the method into prestige work." },
+  { id:"ogilvy", first:"David", last:"Ogilvy", year:"1948", col:"y1948", tradition:"rational", bridgeTo:"emotional",
+    bio:"The Re/Blue split. Reason-why on one side, image on the other. Ogilvy refused to pick. Wrote both. Bridged the two traditions when the field demanded a side." },
+  { id:"reeves", first:"Rosser", last:"Reeves", year:"1959", col:"y1959", tradition:"rational",
+    bio:"USP. One claim, hammered, owned. Anacin was a combination analgesic, aspirin plus caffeine plus other compounds. The USP was the formula difference, not just dose." },
+
+  { id:"macmanus", first:"Theodore F.", last:"MacManus", year:"1915", col:"y1915", tradition:"emotional",
+    bio:"Wrote The Penalty of Leadership for Cadillac in 1915. A defensive ad written as principle. Practitioner Paradox introduced: he understood the emotional play decades before theory caught up." },
+  { id:"bernbach", first:"Bill", last:"Bernbach", year:"1949", col:"y1949", tradition:"emotional", interchange:true,
+    bio:"Founded DDB. Volkswagen, Avis, Levy's. Think Small in 1959 wrapped Hopkins in irony. The body copy is ruthlessly rational. Bernbach did not replace argument with feeling. He reframed it." },
+  { id:"mcluhan", first:"Marshall", last:"McLuhan", year:"1964", col:"y1964", tradition:"emotional",
+    bio:"Understanding Media, 1964. The medium reshapes attention before any content arrives. The channel teaches before the message does." },
+  { id:"heath", first:"Robert", last:"Heath", year:"2001", col:"y2001", tradition:"emotional",
+    bio:"The Hidden Power of Advertising, 2001. Low-attention processing builds memory traces the viewer never consciously notices. Emotion carries what reason cannot." },
+  { id:"wood", first:"Orlando", last:"Wood", year:"2019", col:"y2019", tradition:"emotional",
+    bio:"Lemon, 2019. System 1 thinking applied to brand work. The case against pure rationality made operational for planners and creatives." },
+
+  { id:"freud", first:"Sigmund", last:"Freud", year:"1900", col:"y1900", tradition:"unconscious",
+    bio:"The Interpretation of Dreams, 1900. The unconscious as discoverable territory. The intellectual root the rest of the unconscious tradition draws from." },
+  { id:"dichter", first:"Ernest", last:"Dichter", year:"1950", col:"y1950", tradition:"unconscious",
+    bio:"Motivation research applied Freud to consumer behaviour. The cake mix and add-an-egg story is largely apocryphal. Food chemistry drove the egg requirement." },
+  { id:"packard", first:"Vance", last:"Packard", year:"1957", col:"y1957", tradition:"unconscious",
+    bio:"The Hidden Persuaders, 1957. Public panic. Congressional hearings. The industry retreated from Dichter not because the work failed, but because the public found it monstrous." },
+  { id:"gossage", first:"Howard", last:"Gossage", year:"1960s", col:"y1964", tradition:"unconscious", offsetY:48,
+    bio:"Argued advertising should reward the reader, not interrupt them. The patron saint of permission, decades before the term." },
+  { id:"damasio", first:"Antonio", last:"Damasio", year:"1994", col:"y1994", tradition:"unconscious", ghost:true,
+    bio:"Descartes' Error, 1994. Elliot's meningioma case proved emotion is necessary for rational decision. Phineas Gage is folklore. Elliot is the clinical proof." },
+
+  { id:"starch", first:"Starch", last:"& Gallup", year:"1930s", col:"y1930s", tradition:"empirical",
+    bio:"Recognition and recall, the 1930s. Print and radio instruments. The first attempts to make advertising readable as numbers." },
+  { id:"krugman", first:"Herbert", last:"Krugman", year:"1965", col:"y1965", tradition:"empirical",
+    bio:"Television teaches without trying. Repetition does the work attention will not. Low-involvement learning reframed how memory forms under indifferent viewing." },
+  { id:"ehrenberg", first:"Andrew", last:"Ehrenberg", year:"1972", col:"y1972", tradition:"empirical",
+    bio:"Repeat Buying, 1972. ATR: Awareness, Trial, Reinforcement. Light buyers drive growth, not loyalists. Empirical, not theoretical." },
+  { id:"sharp", first:"Byron", last:"Sharp", year:"2010", col:"y2010", tradition:"empirical", interchange:true,
+    bio:"Argues against meaningful differentiation and for distinctiveness. CEPs trigger occasions. DBAs fire when those occasions arise. Mental availability over preference." },
+  { id:"romaniuk", first:"Jenni", last:"Romaniuk", year:"2012", col:"y2011", tradition:"empirical", offsetY:48,
+    bio:"Ehrenberg-Bass Institute, 2012. Codified the visual and verbal signals the brand owns. Made Sharp's argument operational for the planner's toolkit." },
+  { id:"binetfield", first:"Binet", last:"& Field", year:"2013", col:"y2013", tradition:"empirical", bridgeTo:"emotional",
+    bio:"IPA Databank work, 2013. Long-term emotional building plus short-term activation. The 60/40 ratio is a diagnostic baseline, not a universal constant." },
+  { id:"nelsonfield", first:"Karen", last:"Nelson-Field", year:"2020", col:"y2020", tradition:"empirical",
+    bio:"Made attention measurable, 2020. Showed that not all impressions are equal. Reframed media buying as attention buying." },
+
+  { id:"king", first:"Stephen", last:"King", year:"1968", col:"y1968", tradition:"branding",
+    bio:"JWT, 1968. The T-Plan. Quantitative and Ehrenberg-informed. Brand strategy as the discipline that organises the work." },
+
+  { id:"pollitt", first:"Stanley", last:"Pollitt", year:"1968", col:"y1968", tradition:"consumer",
+    bio:"BMP, 1968. Account planning from consumer reality outward. Qualitative, not quantitative. Protects creative work from research that would flatten it. Distinct from King." },
+
+  { id:"cialdini", first:"Robert", last:"Cialdini", year:"1984", col:"y1984", tradition:"behavioural", ghost:true,
+    bio:"Influence, 1984. Reciprocity, commitment, social proof, authority, liking, scarcity. Behavioural science as a practitioner toolkit." },
+  { id:"thaler", first:"Richard", last:"Thaler", year:"2008", col:"y2008", tradition:"behavioural",
+    bio:"Nudge, 2008. Default settings as policy lever. Choice architecture as discipline. The behavioural turn made institutional." },
+  { id:"ariely", first:"Dan", last:"Ariely", year:"2008", col:"y2008", tradition:"behavioural", offsetY:48,
+    bio:"Predictably Irrational, 2008. Made behavioural economics a bestseller. The 2021 data fabrication should be named, not euphemised." },
+  { id:"kahneman", first:"Daniel", last:"Kahneman", year:"2011", col:"y2011", tradition:"behavioural",
+    bio:"Thinking, Fast and Slow, 2011. Popularised System 1 and System 2. Stanovich and West coined the labels in 2000. Kahneman gave them to the field." },
+  { id:"sutherland", first:"Rory", last:"Sutherland", year:"2019", col:"y2019", tradition:"behavioural",
+    bio:"Alchemy, 2019. Argued perceived value is real value. Logic is one tool. Magic is another. The vice-chairman case for irrationality as advantage." },
+];
+
+const BRIDGES = [
+  { fromTrad:"rational", toTrad:"emotional", col:"y1948" },
+  { fromTrad:"ethics",   toTrad:"unconscious", col:"y1929" },
+  { fromTrad:"emotional",toTrad:"empirical", col:"y2013" },
+];
+
+// ============================================================
+// WARM STARTS — three productive pairings for arrival
+// Each carries the question that frames the fight and a small line of stakes.
+// ============================================================
+const WARM_STARTS = [
+  {
+    a:"hopkins", b:"pollitt",
+    question:"What should research do?",
+    topic:"what research should do",
+    subtitle:"The foundational fight.",
+    context:"Hopkins set the rules for measuring what works. Pollitt set the rules for understanding what matters. They never agreed. Modern advertising still doesn't.",
+  },
+  {
+    a:"sharp", b:"bernbach",
+    question:"What is creativity for?",
+    topic:"creativity",
+    subtitle:"Data against instinct.",
+  },
+  {
+    a:"reeves", b:"heath",
+    question:"What counts as proof?",
+    topic:"what counts as proof",
+    subtitle:"What you can prove against what you can't.",
+  },
+];
+
+// Editorial explanations for the confidence labels
+const CONFIDENCE_EXPLANATIONS = {
+  high: "The figure spoke and wrote on these questions directly. Voice closely modelled.",
+  medium: "Position is documented. Voice is less distinctive — the reconstruction relies on inference.",
+  low: "Limited firsthand record on these specific questions. Voice is largely reconstructed within their known stance.",
+};
+
+// ============================================================
+// MAIN — phase state machine
+// ============================================================
+function AnatomyOfAdvertising() {
+  const [phase, setPhase] = useState("arrival"); // arrival | map | composition | exchange
+  const [slotA, setSlotA] = useState(null);
+  const [slotB, setSlotB] = useState(null);
+  const [topic, setTopic] = useState("");
+  const [exchange, setExchange] = useState(null); // { topic, turns: [{speaker, text}] }
+  const [visibleTurns, setVisibleTurns] = useState(0);
+  const [loadingText, setLoadingText] = useState(null);
+  const [error, setError] = useState(null);
+  const [hoveredId, setHoveredId] = useState(null);
+  const [followUpFor, setFollowUpFor] = useState(null); // 'A' | 'B' | null
+  const [followUpText, setFollowUpText] = useState("");
+  const [starterContext, setStarterContext] = useState(null);
+  const [exportFeedback, setExportFeedback] = useState(null);
+  const [roomCard, setRoomCard] = useState(null);
+  const [scoringInFlight, setScoringInFlight] = useState(false);
+  const [roundCount, setRoundCount] = useState(1);
+  const [priorRoomScore, setPriorRoomScore] = useState(null);
+
+  const thinkerById = useMemo(() => {
+    const m = {}; THINKERS.forEach(t => m[t.id] = t); return m;
+  }, []);
+  const slotAObj = slotA ? thinkerById[slotA] : null;
+  const slotBObj = slotB ? thinkerById[slotB] : null;
+  const hoveredObj = hoveredId ? thinkerById[hoveredId] : null;
+
+  // ---- Navigation ----
+  function goArrival() {
+    setPhase("arrival"); setSlotA(null); setSlotB(null);
+    setTopic(""); setExchange(null); setVisibleTurns(0);
+    setLoadingText(null); setError(null); setFollowUpFor(null); setFollowUpText("");
+    setStarterContext(null); setExportFeedback(null);
+    setRoomCard(null); setRoundCount(1); setPriorRoomScore(null);
+  }
+  function goMap() { setPhase("map"); setError(null); }
+
+  function tapStation(id) {
+    const t = thinkerById[id];
+    if (!t || t.kind) return; // events, ads, instruments, patterns are not debaters
+    if (id === slotA) { setSlotA(null); return; }
+    if (id === slotB) { setSlotB(null); return; }
+    if (!slotA) { setSlotA(id); return; }
+    if (!slotB) {
+      setSlotB(id);
+      // Both filled — go to composition
+      setTimeout(() => setPhase("composition"), 180);
+      return;
+    }
+    setSlotA(slotB); setSlotB(id);
+  }
+
+  function warmStart(idA, idB, topicStr, contextStr) {
+    setSlotA(idA); setSlotB(idB); setTopic(topicStr);
+    setStarterContext(contextStr || null);
+    setPhase("composition");
+  }
+
+  function goExchangeFromComposition() {
+    if (!slotAObj || !slotBObj) return;
+    setPhase("exchange");
+    runExchange(topic);
+  }
+
+  function changeRoom() {
+    setExchange(null); setVisibleTurns(0); setError(null);
+    setFollowUpFor(null); setFollowUpText("");
+    setPhase("composition");
+  }
+
+  function exportToMarkdown() {
+    if (!exchange || !slotAObj || !slotBObj) return;
+    const lines = [];
+    lines.push(`# ${slotAObj.first} ${slotAObj.last} & ${slotBObj.first} ${slotBObj.last}`);
+    lines.push("");
+    lines.push(`*${exchange.topic}*`);
+    lines.push("");
+    if (exchange.context) {
+      lines.push(`> ${exchange.context}`);
+      lines.push("");
+    }
+    lines.push("---");
+    lines.push("");
+    exchange.turns.forEach(turn => {
+      if (turn.speaker === "host") {
+        lines.push(`**Host, to ${turn.target}**`);
+        lines.push("");
+        lines.push(`*${turn.text}*`);
+      } else {
+        const speaker = turn.speaker === "A" ? slotAObj : slotBObj;
+        lines.push(`**${speaker.first} ${speaker.last}** (${speaker.year}) · ${TRADITIONS[speaker.tradition].label}`);
+        lines.push("");
+        lines.push(turn.text);
+      }
+      lines.push("");
+    });
+    lines.push("---");
+    lines.push("");
+    lines.push("*Reconstructions. Positions drawn from published work, voices approximated. Informed pastiche, not direct quotation.*");
+    lines.push("");
+    lines.push("From The Anatomy of Advertising — a graduate-level course in advertising theory and history.");
+    const md = lines.join("\n");
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(md).then(() => {
+        setExportFeedback("Copied to clipboard");
+        setTimeout(() => setExportFeedback(null), 2400);
+      }).catch(() => {
+        setExportFeedback("Copy failed — try again");
+        setTimeout(() => setExportFeedback(null), 2400);
+      });
+    } else {
+      setExportFeedback("Clipboard not available in this browser");
+      setTimeout(() => setExportFeedback(null), 2400);
+    }
+  }
+
+  // ---- API calls ----
+  async function callClaude(prompt, maxTokens = 1500) {
+    const res = await fetch("/api/claude", {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({
+        model:"claude-sonnet-4-20250514",
+        max_tokens: maxTokens,
+        messages:[{ role:"user", content: prompt }],
+      }),
+    });
+    if (res.status === 429) {
+      let body = {};
+      try { body = await res.json(); } catch {}
+      const err = new Error(body.message || "The reading room is full for today.");
+      err.code = body.error || "rate_limited";
+      err.userMessage = body.message;
+      throw err;
+    }
+    if (!res.ok) {
+      let body = {};
+      try { body = await res.json(); } catch {}
+      throw new Error(body.error || `Server error ${res.status}`);
+    }
+    const data = await res.json();
+    const text = data.content.filter(b=>b.type==="text").map(b=>b.text).join("");
+    const clean = text.replace(/```json/g,"").replace(/```/g,"").trim();
+    return JSON.parse(clean);
+  }
+
+  // Build a transcript string from turns so far, for use as context in the next call
+  function transcriptText(turns, aObj, bObj) {
+    return turns.map(t => {
+      if (t.speaker === "host") return `HOST (to ${t.target}): ${t.text}`;
+      const who = t.speaker === "A" ? aObj.last : bObj.last;
+      return `${who.toUpperCase()}: ${t.text}`;
+    }).join("\n\n");
+  }
+
+  // Generate a single turn, given the current speaker and prior transcript.
+  // The model only sees what has been said. It cannot pre-plan future turns.
+  async function generateTurn({ speakerKey, aObj, bObj, topic, priorTurns, isOpening }) {
+    const speaker = speakerKey === "A" ? aObj : bObj;
+    const opponent = speakerKey === "A" ? bObj : aObj;
+    const prior = transcriptText(priorTurns, aObj, bObj);
+
+    const openingInstruction = isOpening
+      ? `You are opening the exchange. Stake out your position on the topic in 2 to 3 sentences. Make a claim concrete enough that ${opponent.last} can disagree with it.`
+      : `Respond directly to what ${opponent.last} just said. Engage with their specific claim. Concede what you must. Hold what you can. 2 to 4 sentences.`;
+
+    const prompt = `You are speaking as ${speaker.first} ${speaker.last} (${speaker.year}), in conversation with ${opponent.first} ${opponent.last} (${opponent.year}).
+
+YOUR POSITION: ${speaker.bio}
+THEIR POSITION: ${opponent.bio}
+TOPIC: ${topic}
+
+${prior ? `THE EXCHANGE SO FAR:\n${prior}\n\n` : ''}NOW IT IS YOUR TURN.
+
+${openingInstruction}
+
+Voice rules:
+- In the voice of ${speaker.last}, sounding like they would actually sound.
+- Practitioner register. Short declarative sentences. No hedging.
+- Concrete reference to your ideas, methods, work, or examples.
+- No pleasantries. No "I would argue." No academic puff. No em dashes.
+- Do not summarise the topic. Speak.
+
+Return JSON only. No preamble. No fences. Schema:
+{ "text": "your turn" }`;
+
+    const result = await callClaude(prompt, 600);
+    return { speaker: speakerKey, text: result.text };
+  }
+
+  // After a turn is generated, score whether it actually engaged with the prior turn.
+  // If it failed, regenerate once. This catches the parallel-monologue failure mode.
+  async function refereeAndMaybeRegenerate({ turn, speakerKey, aObj, bObj, topic, priorTurns, isOpening }) {
+    if (isOpening || priorTurns.length === 0) return turn;
+    const lastOpponentTurn = [...priorTurns].reverse().find(t => t.speaker !== speakerKey && t.speaker !== "host");
+    if (!lastOpponentTurn) return turn;
+
+    const speaker = speakerKey === "A" ? aObj : bObj;
+    const opponent = speakerKey === "A" ? bObj : aObj;
+
+    const refPrompt = `You are a debate referee. Score whether the response below actually engages with what was just said, or whether it monologues past it.
+
+WHAT ${opponent.last.toUpperCase()} SAID:
+${lastOpponentTurn.text}
+
+WHAT ${speaker.last.toUpperCase()} REPLIED:
+${turn.text}
+
+Score on these:
+1. Does the reply name something specific from the prior turn (a claim, an example, a word)?
+2. Does the reply respond to that thing, rather than restating its own position?
+
+Return JSON only. Schema:
+{ "engages": true | false, "reason": "one short sentence" }`;
+
+    try {
+      const verdict = await callClaude(refPrompt, 200);
+      if (verdict.engages) return turn;
+
+      // Regenerate once, with the referee's note as a constraint
+      const speaker2 = speakerKey === "A" ? aObj : bObj;
+      const opponent2 = speakerKey === "A" ? bObj : aObj;
+      const prior = transcriptText(priorTurns, aObj, bObj);
+      const fixPrompt = `You are speaking as ${speaker2.first} ${speaker2.last} (${speaker2.year}), in conversation with ${opponent2.first} ${opponent2.last}.
+
+YOUR POSITION: ${speaker2.bio}
+THEIR POSITION: ${opponent2.bio}
+TOPIC: ${topic}
+
+THE EXCHANGE SO FAR:
+${prior}
+
+NOW IT IS YOUR TURN.
+
+You must respond to ${opponent2.last}'s most recent point directly. Quote a phrase from it. Disagree with it specifically. Do not restate your existing position. Do not change the subject. 2 to 4 sentences. No em dashes. No academic puff.
+
+Return JSON only. Schema: { "text": "your turn" }`;
+
+      const fixed = await callClaude(fixPrompt, 600);
+      return { speaker: speakerKey, text: fixed.text };
+    } catch (e) {
+      // If the referee call itself fails, keep the original turn
+      return turn;
+    }
+  }
+
+  // ---- The referee. Scores the exchange after it completes. ----
+  // Two scores: Room Score (0-100) for the dialectic itself across five
+  // dimensions, and Voice Fidelity (0-100 per figure) for how close the
+  // reconstruction sits to the documented record.
+  async function evaluateExchange(turnsArg, aObj, bObj, topic, opts = {}) {
+    const transcript = turnsArg.map((t, i) => {
+      if (t.speaker === "host") return `[host, to ${t.target}]: ${t.text}`;
+      const who = t.speaker === "A" ? aObj.last : bObj.last;
+      return `[turn ${i+1}] ${who}: ${t.text}`;
+    }).join("\n\n");
+
+    const prompt = `You are a referee scoring a simulated debate between two figures from advertising history. The simulation is a reconstruction, not direct quotation. Your job is to score two things, in editorial register.
+
+FIGURE A: ${aObj.first} ${aObj.last} (${aObj.year})
+A's documented position and work: ${aObj.bio}
+
+FIGURE B: ${bObj.first} ${bObj.last} (${bObj.year})
+B's documented position and work: ${bObj.bio}
+
+TOPIC: ${topic}
+
+TRANSCRIPT:
+${transcript}
+
+SCORE ONE — ROOM SCORE (0-100). How well did this function as a real argument? Score five dimensions, each 0-20:
+- engagement: Did each turn respond to the prior turn, or monologue past it?
+- specificity: Did each speaker reference their own work concretely, or stay abstract?
+- concession: Did either speaker grant a real point, or did they hold their position untouched?
+- escalation: Did the argument get sharper across turns, or did it flatten?
+- productiveness: Did the exchange surface real intellectual ground, or rehash known positions?
+Sum the five for the Room Score.
+
+SCORE TWO — VOICE FIDELITY (0-100 per figure). How close did the reconstruction sit to the documented record for each figure? For each speaker, evaluate:
+- Did they reference something concrete from their actual work, methods, or examples?
+- Did the register match their period and idiom?
+- Were factual claims consistent with what they actually published?
+Score each figure 0-100 independently. Tier-three figures with limited firsthand record will score lower. That is correct and surfaces the disclaimer.
+
+MOVE OF THE ROUND: Identify the single sharpest turn in the exchange. Give the turn number, the speaker (A or B), and one sentence on why it landed. Quote a phrase under 12 words from the turn itself.
+
+OPEN GROUND: For each figure, in one sentence, what does their position need to address that this exchange did not? This is the pedagogical payload. Specific. Not generic.
+
+Return JSON only. No preamble. No fences. Schema:
+{
+  "roomScore": number,
+  "rubric": {
+    "engagement": number,
+    "specificity": number,
+    "concession": number,
+    "escalation": number,
+    "productiveness": number
+  },
+  "roomNote": "one short editorial sentence summarising the exchange",
+  "voiceFidelityA": number,
+  "voiceFidelityB": number,
+  "voiceNoteA": "one short note on A's reconstruction",
+  "voiceNoteB": "one short note on B's reconstruction",
+  "moveOfRound": {
+    "turnIndex": number,
+    "speaker": "A" | "B",
+    "quote": "phrase from that turn, under 12 words",
+    "reason": "one sentence on why it landed"
+  },
+  "openGroundA": "one sentence on what A needs to address",
+  "openGroundB": "one sentence on what B needs to address"
+}`;
+
+    const result = await callClaude(prompt, 1200);
+    return result;
+  }
+
+  async function scoreCurrentExchange(turnsArg, aObj, bObj, topic) {
+    if (!turnsArg || turnsArg.length < 4) return; // need real exchange
+    setScoringInFlight(true);
+    try {
+      const card = await evaluateExchange(turnsArg, aObj, bObj, topic);
+      setRoomCard(card);
+    } catch (e) {
+      console.error("Scoring failed:", e);
+      // Silent failure — the exchange still ships without a card.
+    } finally {
+      setScoringInFlight(false);
+    }
+  }
+
+  async function runExchange(topicArg) {
+    if (!slotAObj || !slotBObj) return;
+    setError(null); setExchange(null); setVisibleTurns(0);
+    setRoomCard(null); setPriorRoomScore(null); setRoundCount(1);
+    const usedTopic = (topicArg || "").trim();
+
+    // Phase 1 — choose or refine the topic
+    setLoadingText(`${slotAObj.last} and ${slotBObj.last} are taking their seats.`);
+    let topicPhrase = usedTopic;
+    if (!topicPhrase) {
+      try {
+        const t = await callClaude(`Two figures from advertising history are about to debate. Pick the single most productive disagreement between them. State it as a short editorial phrase, lower-case unless proper noun, no closing punctuation.
+
+A: ${slotAObj.first} ${slotAObj.last}. ${slotAObj.bio}
+B: ${slotBObj.first} ${slotBObj.last}. ${slotBObj.bio}
+
+Return JSON only. Schema: { "topic": "the topic" }`, 200);
+        topicPhrase = t.topic;
+      } catch (e) {
+        topicPhrase = "their most productive disagreement";
+      }
+    }
+
+    // Phase 2 — generate turns sequentially. Each turn sees only what came before.
+    const turns = [];
+    const speakers = ["A", "B", "A", "B", "A", "B"];
+    const initial = {
+      topic: topicPhrase,
+      turns: [],
+      ...(starterContext ? { context: starterContext } : {}),
+    };
+    setExchange(initial);
+
+    try {
+      for (let i = 0; i < speakers.length; i++) {
+        const speakerKey = speakers[i];
+        const speakerName = speakerKey === "A" ? slotAObj.last : slotBObj.last;
+        const opponentName = speakerKey === "A" ? slotBObj.last : slotAObj.last;
+        setLoadingText(
+          i === 0
+            ? `${speakerName} is opening.`
+            : `${speakerName} is responding to what ${opponentName} just said.`
+        );
+
+        let turn = await generateTurn({
+          speakerKey,
+          aObj: slotAObj, bObj: slotBObj,
+          topic: topicPhrase,
+          priorTurns: turns,
+          isOpening: i === 0,
+        });
+
+        // Referee pass on responses (not on the opening turn)
+        if (i > 0) {
+          setLoadingText(`Checking that ${speakerName} actually responded.`);
+          turn = await refereeAndMaybeRegenerate({
+            turn, speakerKey,
+            aObj: slotAObj, bObj: slotBObj,
+            topic: topicPhrase,
+            priorTurns: turns,
+            isOpening: false,
+          });
+        }
+
+        turns.push(turn);
+        // Reveal the turn immediately as it lands
+        setExchange({ ...initial, turns: [...turns] });
+        setVisibleTurns(turns.length);
+      }
+      setLoadingText(null);
+      // After all turns land, score the exchange. Async, non-blocking.
+      scoreCurrentExchange(turns, slotAObj, slotBObj, topicPhrase);
+    } catch (e) {
+      console.error(e);
+      setError(e.userMessage || "The room could not be set. Try again.");
+      setLoadingText(null);
+    }
+  }
+
+  // Reveal animation is no longer needed — turns appear as they generate.
+  // Kept as a passthrough for the continue/pushback/follow-up paths that still batch.
+  function revealTurns(fromIndex, toIndex) {
+    setVisibleTurns(toIndex);
+  }
+
+  // ---- Round types. Two ways to escalate after a scored exchange. ----
+
+  // Push them harder on the same topic. The referee's open-ground notes
+  // become the agenda. The new exchange has explicit pressure constraints.
+  async function pushHarder() {
+    if (!exchange || !roomCard || !slotAObj || !slotBObj) return;
+    setPriorRoomScore(roomCard.roomScore);
+    setRoundCount(r => r + 1);
+    setError(null);
+
+    // Build a constrained re-run of the same topic with the prior round's
+    // weakness as the agenda. Same engine as runExchange, but the prompt
+    // injects the open-ground notes.
+    const topicPhrase = exchange.topic;
+    setExchange(null); setVisibleTurns(0);
+    const newInitial = {
+      topic: topicPhrase,
+      turns: [],
+      ...(starterContext ? { context: starterContext } : {}),
+      pressure: {
+        priorRoomScore: roomCard.roomScore,
+        openGroundA: roomCard.openGroundA,
+        openGroundB: roomCard.openGroundB,
+      },
+    };
+    setExchange(newInitial);
+    setRoomCard(null);
+
+    const turns = [];
+    const speakers = ["A", "B", "A", "B", "A", "B"];
+
+    try {
+      for (let i = 0; i < speakers.length; i++) {
+        const speakerKey = speakers[i];
+        const speaker = speakerKey === "A" ? slotAObj : slotBObj;
+        const opponent = speakerKey === "A" ? slotBObj : slotAObj;
+        const speakerOpenGround = speakerKey === "A" ? roomCard.openGroundA : roomCard.openGroundB;
+        setLoadingText(
+          i === 0
+            ? `${speaker.last} is opening, with the prior round's pressure.`
+            : `${speaker.last} is responding to ${opponent.last}.`
+        );
+
+        // Constrained generation — the speaker must address their open-ground
+        // weakness from the prior round.
+        const prior = transcriptText(turns, slotAObj, slotBObj);
+        const isOpening = i === 0;
+        const constraint = isOpening
+          ? `OPEN with a position that directly addresses what the prior round revealed you needed to address: "${speakerOpenGround}". Do not rehash your stock position. Engage the open ground.`
+          : `Respond to ${opponent.last}'s last turn. Where relevant, address the open ground from the prior round: "${speakerOpenGround}".`;
+
+        const turnPrompt = `You are speaking as ${speaker.first} ${speaker.last} (${speaker.year}), in conversation with ${opponent.first} ${opponent.last}.
+
+YOUR POSITION: ${speaker.bio}
+THEIR POSITION: ${opponent.bio}
+TOPIC: ${topicPhrase}
+
+PRIOR ROUND'S PRESSURE: This is round ${roundCount + 1} on this topic. The prior round scored ${roomCard.roomScore}/100. The referee's note for you: "${speakerOpenGround}"
+
+${prior ? `THE EXCHANGE SO FAR:\n${prior}\n\n` : ''}NOW IT IS YOUR TURN.
+
+${constraint}
+
+Voice rules:
+- In the voice of ${speaker.last}.
+- Practitioner register. Short declarative sentences. No hedging.
+- Concrete reference to your work, methods, or examples.
+- No pleasantries. No "I would argue." No academic puff. No em dashes.
+- 2 to 4 sentences.
+
+Return JSON only. Schema: { "text": "your turn" }`;
+
+        const result = await callClaude(turnPrompt, 700);
+        let turn = { speaker: speakerKey, text: result.text };
+
+        if (i > 0) {
+          setLoadingText(`Checking that ${speaker.last} actually responded.`);
+          turn = await refereeAndMaybeRegenerate({
+            turn, speakerKey,
+            aObj: slotAObj, bObj: slotBObj,
+            topic: topicPhrase,
+            priorTurns: turns,
+            isOpening: false,
+          });
+        }
+
+        turns.push(turn);
+        setExchange({ ...newInitial, turns: [...turns] });
+        setVisibleTurns(turns.length);
+      }
+      setLoadingText(null);
+      scoreCurrentExchange(turns, slotAObj, slotBObj, topicPhrase);
+    } catch (e) {
+      console.error(e);
+      setError(e.userMessage || "The next round could not be set. Try again.");
+      setLoadingText(null);
+    }
+  }
+
+  // Same pair, new question. Clears the old exchange, prompts the user for
+  // a new topic, then runs the engine fresh.
+  function newQuestionSamePair() {
+    setExchange(null); setVisibleTurns(0); setRoomCard(null);
+    setRoundCount(1); setPriorRoomScore(null);
+    setTopic(""); setStarterContext(null);
+    setPhase("composition"); // back to topic entry with the same pair
+  }
+
+  async function continueExchange() {
+    if (!exchange || !slotAObj || !slotBObj) return;
+    setError(null);
+
+    const lastNonHost = [...exchange.turns].reverse().find(t => t.speaker !== "host");
+    if (!lastNonHost) return;
+    const startKey = lastNonHost.speaker === "A" ? "B" : "A";
+    const speakers = [startKey, startKey === "A" ? "B" : "A", startKey, startKey === "A" ? "B" : "A"];
+    let working = [...exchange.turns];
+
+    try {
+      for (let i = 0; i < speakers.length; i++) {
+        const speakerKey = speakers[i];
+        const speakerName = speakerKey === "A" ? slotAObj.last : slotBObj.last;
+        const opponentName = speakerKey === "A" ? slotBObj.last : slotAObj.last;
+        setLoadingText(`${speakerName} is responding to ${opponentName}.`);
+
+        let turn = await generateTurn({
+          speakerKey,
+          aObj: slotAObj, bObj: slotBObj,
+          topic: exchange.topic,
+          priorTurns: working,
+          isOpening: false,
+        });
+
+        setLoadingText(`Checking that ${speakerName} actually responded.`);
+        turn = await refereeAndMaybeRegenerate({
+          turn, speakerKey,
+          aObj: slotAObj, bObj: slotBObj,
+          topic: exchange.topic,
+          priorTurns: working,
+          isOpening: false,
+        });
+
+        working = [...working, turn];
+        setExchange({ ...exchange, turns: working });
+        setVisibleTurns(working.length);
+      }
+      setLoadingText(null);
+      // Re-score with the extended exchange. Replaces the prior card.
+      setRoomCard(null);
+      scoreCurrentExchange(working, slotAObj, slotBObj, exchange.topic);
+    } catch (e) {
+      console.error(e);
+      setError(e.userMessage || "The exchange could not continue. Try again.");
+      setLoadingText(null);
+    }
+  }
+
+  async function pushBack() {
+    if (!exchange || !slotAObj || !slotBObj) return;
+    const lastNonHost = [...exchange.turns].reverse().find(t => t.speaker !== "host");
+    if (!lastNonHost) return;
+    const challengerKey = lastNonHost.speaker === "A" ? "B" : "A";
+    const defenderKey = lastNonHost.speaker;
+    const challengerName = challengerKey === "A" ? slotAObj.last : slotBObj.last;
+    const defenderName = defenderKey === "A" ? slotAObj.last : slotBObj.last;
+    const challenger = challengerKey === "A" ? slotAObj : slotBObj;
+    const defender = defenderKey === "A" ? slotAObj : slotBObj;
+    setError(null);
+
+    let working = [...exchange.turns];
+
+    try {
+      // Turn one: the challenger pushes back hard
+      setLoadingText(`${challengerName} is pushing back on ${defenderName}.`);
+      const prior = transcriptText(working, slotAObj, slotBObj);
+      const challengePrompt = `You are speaking as ${challenger.first} ${challenger.last} (${challenger.year}). The host wants you to push back hard on what ${defenderName} just said.
+
+YOUR POSITION: ${challenger.bio}
+THEIR POSITION: ${defender.bio}
+TOPIC: ${exchange.topic}
+
+THE EXCHANGE SO FAR:
+${prior}
+
+Push back. Name the specific weakness in ${defenderName}'s last point. Quote a phrase from it if you must. Be sharp, not rude. 2 to 4 sentences. No em dashes. No academic puff.
+
+Return JSON only. Schema: { "text": "your push-back" }`;
+
+      const challengeResult = await callClaude(challengePrompt, 600);
+      const challengeTurn = { speaker: challengerKey, text: challengeResult.text };
+      working = [...working, challengeTurn];
+      setExchange({ ...exchange, turns: working });
+      setVisibleTurns(working.length);
+
+      // Turn two: the defender responds to the push-back
+      setLoadingText(`${defenderName} is defending.`);
+      let defendTurn = await generateTurn({
+        speakerKey: defenderKey,
+        aObj: slotAObj, bObj: slotBObj,
+        topic: exchange.topic,
+        priorTurns: working,
+        isOpening: false,
+      });
+
+      setLoadingText(`Checking that ${defenderName} actually responded.`);
+      defendTurn = await refereeAndMaybeRegenerate({
+        turn: defendTurn,
+        speakerKey: defenderKey,
+        aObj: slotAObj, bObj: slotBObj,
+        topic: exchange.topic,
+        priorTurns: working,
+        isOpening: false,
+      });
+
+      working = [...working, defendTurn];
+      setExchange({ ...exchange, turns: working });
+      setVisibleTurns(working.length);
+      setLoadingText(null);
+      setRoomCard(null);
+      scoreCurrentExchange(working, slotAObj, slotBObj, exchange.topic);
+    } catch (e) {
+      console.error(e);
+      setError(e.userMessage || "The push back failed. Try again.");
+      setLoadingText(null);
+    }
+  }
+
+  async function submitFollowUp() {
+    if (!followUpFor || !followUpText.trim() || !exchange || !slotAObj || !slotBObj) return;
+    const targetKey = followUpFor;
+    const otherKey = targetKey === "A" ? "B" : "A";
+    const target = targetKey === "A" ? slotAObj : slotBObj;
+    const other = otherKey === "A" ? slotAObj : slotBObj;
+    const question = followUpText.trim();
+    setError(null);
+    setFollowUpFor(null); setFollowUpText("");
+
+    // Inject the host question as a turn so the rest of the conversation can see it
+    const hostTurn = { speaker: "host", text: question, target: target.last };
+    let working = [...exchange.turns, hostTurn];
+    setExchange({ ...exchange, turns: working });
+    setVisibleTurns(working.length);
+
+    try {
+      // Turn one: target answers the host
+      setLoadingText(`${target.last} is answering your question.`);
+      const prior = transcriptText(working, slotAObj, slotBObj);
+      const answerPrompt = `You are speaking as ${target.first} ${target.last} (${target.year}). The host has just put a question to you in this debate with ${other.last}.
+
+YOUR POSITION: ${target.bio}
+THE OTHER POSITION: ${other.bio}
+TOPIC: ${exchange.topic}
+
+THE EXCHANGE SO FAR:
+${prior}
+
+Answer the host's question directly. In your voice. 2 to 4 sentences. Concrete. No hedging. No em dashes. No academic puff.
+
+Return JSON only. Schema: { "text": "your answer" }`;
+
+      const answerResult = await callClaude(answerPrompt, 600);
+      const answerTurn = { speaker: targetKey, text: answerResult.text };
+      working = [...working, answerTurn];
+      setExchange({ ...exchange, turns: working });
+      setVisibleTurns(working.length);
+
+      // Turn two: the other figure reacts
+      setLoadingText(`${other.last} is reacting to ${target.last}'s answer.`);
+      let reactTurn = await generateTurn({
+        speakerKey: otherKey,
+        aObj: slotAObj, bObj: slotBObj,
+        topic: exchange.topic,
+        priorTurns: working,
+        isOpening: false,
+      });
+
+      setLoadingText(`Checking that ${other.last} actually responded.`);
+      reactTurn = await refereeAndMaybeRegenerate({
+        turn: reactTurn,
+        speakerKey: otherKey,
+        aObj: slotAObj, bObj: slotBObj,
+        topic: exchange.topic,
+        priorTurns: working,
+        isOpening: false,
+      });
+
+      working = [...working, reactTurn];
+      setExchange({ ...exchange, turns: working });
+      setVisibleTurns(working.length);
+      setLoadingText(null);
+      setRoomCard(null);
+      scoreCurrentExchange(working, slotAObj, slotBObj, exchange.topic);
+    } catch (e) {
+      console.error(e);
+      setError(e.userMessage || "The follow-up could not be answered. Try again.");
+      setLoadingText(null);
+    }
+  }
+
+  // ---- Render ----
+  return (
+    <div className="aoa-root">
+      <GlobalStyle />
+      <Shell phase={phase} onLeave={goArrival} onMap={goMap}>
+        {phase === "arrival" && (
+          <ArrivalScreen
+            warmStarts={WARM_STARTS}
+            thinkerById={thinkerById}
+            onWarmStart={warmStart}
+            onOpenMap={goMap}
+          />
+        )}
+        {phase === "map" && (
+          <MapScreen
+            slotA={slotA} slotB={slotB}
+            hoveredId={hoveredId}
+            hoveredObj={hoveredObj}
+            onTap={tapStation}
+            onHover={setHoveredId}
+            onClear={() => { setSlotA(null); setSlotB(null); }}
+            onLeave={goArrival}
+          />
+        )}
+        {phase === "composition" && (
+          <CompositionScreen
+            slotAObj={slotAObj} slotBObj={slotBObj}
+            topic={topic} setTopic={setTopic}
+            onBegin={goExchangeFromComposition}
+            onSwapA={() => { setSlotA(null); setPhase("map"); }}
+            onSwapB={() => { setSlotB(null); setPhase("map"); }}
+            onLeave={goArrival}
+          />
+        )}
+        {phase === "exchange" && (
+          <ExchangeScreen
+            slotAObj={slotAObj} slotBObj={slotBObj}
+            exchange={exchange}
+            visibleTurns={visibleTurns}
+            loadingText={loadingText}
+            error={error}
+            followUpFor={followUpFor}
+            followUpText={followUpText}
+            setFollowUpFor={setFollowUpFor}
+            setFollowUpText={setFollowUpText}
+            onSubmitFollowUp={submitFollowUp}
+            onContinue={continueExchange}
+            onPushBack={pushBack}
+            onChangeRoom={changeRoom}
+            onLeave={goArrival}
+            onExport={exportToMarkdown}
+            exportFeedback={exportFeedback}
+            roomCard={roomCard}
+            scoringInFlight={scoringInFlight}
+            onPushHarder={pushHarder}
+            onNewQuestion={newQuestionSamePair}
+            roundCount={roundCount}
+            priorRoomScore={priorRoomScore}
+          />
+        )}
+      </Shell>
+    </div>
+  );
+}
+
+// ============================================================
+// SHELL
+// ============================================================
+function Shell({ phase, onLeave, onMap, children }) {
+  return (
+    <>
+      <header className="aoa-header">
+        <button className="aoa-wordmark" onClick={onLeave} aria-label="Return to start">
+          <span className="aoa-wordmark-the">The</span> Anatomy of Advertising
+        </button>
+        <nav className="aoa-nav">
+          {phase !== "map" && phase !== "arrival" && (
+            <button className="aoa-link" onClick={onMap}>The map</button>
+          )}
+          {phase !== "arrival" && (
+            <button className="aoa-link" onClick={onLeave}>Leave</button>
+          )}
+        </nav>
+      </header>
+      <main className="aoa-main">{children}</main>
+    </>
+  );
+}
+
+// ============================================================
+// ARRIVAL — quiet, single question, two warm starts, map link
+// ============================================================
+function ArrivalScreen({ warmStarts, thinkerById, onWarmStart, onOpenMap }) {
+  return (
+    <section className="arrival">
+      <div className="arrival-inner">
+        <h1 className="arrival-question">
+          The arguments that built advertising.
+        </h1>
+        <p className="arrival-sub">
+          Two minds. One question. A live debate, every time.
+        </p>
+
+        <div className="arrival-section-label">Three to start with</div>
+
+        <ul className="arrival-pairs">
+          {warmStarts.map((ws, i) => {
+            const a = thinkerById[ws.a];
+            const b = thinkerById[ws.b];
+            if (!a || !b) return null;
+            return (
+              <li key={i} className="arrival-pair" style={{ animationDelay: `${0.4 + i*0.12}s` }}>
+                <button onClick={() => onWarmStart(ws.a, ws.b, ws.topic, ws.context)} className="arrival-pair-btn">
+                  <div className="arrival-pair-question">{ws.question}</div>
+                  <div className="arrival-pair-credit">
+                    <span style={{ color: TRADITIONS[a.tradition].color }}>{a.last}</span>
+                    <span className="arrival-pair-year"> ({a.year})</span>
+                    <span className="arrival-pair-amp"> &middot; </span>
+                    <span style={{ color: TRADITIONS[b.tradition].color }}>{b.last}</span>
+                    <span className="arrival-pair-year"> ({b.year})</span>
+                    {ws.subtitle && <em className="arrival-pair-subtitle"> &mdash; {ws.subtitle}</em>}
+                  </div>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+
+        <button onClick={onOpenMap} className="arrival-map-cta">
+          <div className="arrival-map-cta-line">Or build your own pairing</div>
+          <div className="arrival-map-cta-sub">
+            36 figures &middot; 8 traditions &middot; from Aristotle to today
+            <span className="arrival-arrow"> &rarr;</span>
+          </div>
+        </button>
+
+        <div className="arrival-about">
+          <p>
+            Every theory in advertising was a fight. This is a reading room
+            for those fights &mdash; pick a question and watch two figures from the
+            field's history take it up. Push back. Ask a follow-up. Take the
+            transcript with you.
+          </p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ============================================================
+// MAP — subway map, secondary entry point
+// ============================================================
+function MapScreen({ slotA, slotB, hoveredId, hoveredObj, onTap, onHover, onClear, onLeave }) {
+  const stations = THINKERS.map(t => ({
+    ...t, x: COL_X[t.col], y: ROW_Y[t.tradition] + (t.offsetY || 0),
+  }));
+
+  return (
+    <section className="map-screen">
+      <div className="map-prelude">
+        <p className="map-prelude-text">
+          Pick two figures from any tradition. The room composes when the second is chosen.
+        </p>
+        {(slotA || slotB) && (
+          <button onClick={onClear} className="aoa-link aoa-link-quiet">Clear selection</button>
+        )}
+      </div>
+
+      <MobileMapList slotA={slotA} slotB={slotB} onTap={onTap} />
+
+      <div className="map-scroll map-svg-wrapper">
+        <svg viewBox={`0 0 ${VIEWBOX_W} ${VIEWBOX_H}`} className="map-svg">
+          {/* Tradition lines */}
+          {TRAD_ORDER.map(tradId => {
+            const list = stations.filter(s => s.tradition === tradId && !s.offsetY)
+              .sort((a,b) => a.x - b.x);
+            if (list.length === 0) return null;
+            const y = ROW_Y[tradId];
+            return (
+              <line key={tradId}
+                x1={list[0].x - 40} y1={y}
+                x2={list[list.length-1].x + 60} y2={y}
+                stroke={TRADITIONS[tradId].color}
+                strokeWidth={9} strokeLinecap="round" />
+            );
+          })}
+
+          {/* Bridges */}
+          {BRIDGES.map((b, i) => (
+            <line key={i}
+              x1={COL_X[b.col]} y1={ROW_Y[b.fromTrad]}
+              x2={COL_X[b.col]} y2={ROW_Y[b.toTrad]}
+              stroke="#2c241f" strokeWidth={2.5} strokeDasharray="5 4" opacity={0.4} />
+          ))}
+
+          {/* Stations */}
+          {stations.map(s => {
+            const trad = TRADITIONS[s.tradition];
+            const selected = s.id === slotA || s.id === slotB;
+            const slotLabel = s.id === slotA ? "A" : s.id === slotB ? "B" : null;
+            const hovered = s.id === hoveredId;
+            const isKind = !!s.kind;
+            const showPortrait = hasPortrait(s);
+            const portraitR = 18; // portrait radius in SVG units
+            const dotR = isKind ? 5 : (s.interchange ? 11 : 7);
+            const r = showPortrait ? portraitR : dotR;
+            const clipId = `portrait-clip-${s.id}`;
+            return (
+              <g key={s.id} style={{ cursor: isKind ? "help" : "pointer" }}
+                onMouseEnter={() => onHover(s.id)}
+                onMouseLeave={() => onHover(null)}
+                onClick={() => onTap(s.id)}>
+                <rect x={s.x-44} y={s.y-portraitR-4} width={88} height={portraitR*2+8} fill="transparent" />
+
+                {showPortrait ? (
+                  <>
+                    <defs>
+                      <clipPath id={clipId}>
+                        <circle cx={s.x} cy={s.y} r={portraitR} />
+                      </clipPath>
+                    </defs>
+                    {/* Cream background under the portrait so failed loads
+                        don't show the SVG default which can render that
+                        broken-image landscape icon in some browsers. */}
+                    <circle cx={s.x} cy={s.y} r={portraitR} fill="#f4efe4" clipPath={`url(#${clipId})`} />
+                    <image
+                      href={portraitURL(s.id)}
+                      xlinkHref={portraitURL(s.id)}
+                      x={s.x - portraitR} y={s.y - portraitR}
+                      width={portraitR * 2} height={portraitR * 2}
+                      clipPath={`url(#${clipId})`}
+                      preserveAspectRatio="xMidYMid slice"
+                      onError={(e) => { e.currentTarget.style.display = "none"; }}
+                    />
+                    <circle cx={s.x} cy={s.y} r={portraitR}
+                      fill="none" stroke={trad.color}
+                      strokeWidth={selected ? 3 : (hovered ? 2.5 : 2)} />
+                  </>
+                ) : (
+                  <>
+                    {s.interchange && !isKind && (
+                      <circle cx={s.x} cy={s.y} r={dotR+5} fill="none" stroke={trad.color} strokeWidth={3} />
+                    )}
+                    {isKind ? (
+                      // Kind stations (events, ads, instruments, patterns)
+                      // get a small open dot — clearly secondary to portraits
+                      // and to the numbered pattern markers. Reads as italic.
+                      <circle cx={s.x} cy={s.y} r={4}
+                        fill="#f4efe4" stroke={trad.color}
+                        strokeWidth={1} strokeDasharray="2 1.5" opacity={0.85} />
+                    ) : (
+                      <circle cx={s.x} cy={s.y} r={dotR}
+                        fill={s.ghost ? "#f4efe4" : "#1a1614"}
+                        stroke={s.ghost ? trad.color : "#1a1614"}
+                        strokeWidth={s.ghost ? 2.5 : 2}
+                        strokeDasharray={s.ghost ? "3 2" : undefined} />
+                    )}
+                    {hovered && !selected && !isKind && (
+                      <circle cx={s.x} cy={s.y} r={dotR+6} fill="none" stroke={trad.color} strokeWidth={2} opacity={0.5} />
+                    )}
+                  </>
+                )}
+
+                {selected && (
+                  <>
+                    <circle cx={s.x} cy={s.y} r={r+8} fill="none" stroke={trad.color} strokeWidth={2.5} opacity={0.7} />
+                    <rect x={s.x+r+8} y={s.y-9} width={20} height={18} fill={trad.color} rx={2} />
+                    <text x={s.x+r+18} y={s.y+4} fill="#fff"
+                      fontFamily="JetBrains Mono, monospace"
+                      fontSize={11} fontWeight={700} textAnchor="middle">{slotLabel}</text>
+                  </>
+                )}
+
+                <text x={s.x} y={s.y - r - 8} fill={isKind ? trad.color : "#1a1614"}
+                  fontFamily={isKind ? "Fraunces, serif" : "Plus Jakarta Sans, sans-serif"}
+                  fontSize={isKind ? 12 : 11}
+                  fontWeight={isKind ? 400 : 700}
+                  fontStyle={isKind ? "italic" : "normal"}
+                  textAnchor="middle"
+                  letterSpacing={isKind ? 0 : 0.8}
+                  opacity={isKind ? 0.75 : (hovered ? 1 : 0.92)}>
+                  {isKind ? `${s.first} ${s.last}` : s.last.toUpperCase()}
+                </text>
+                <text x={s.x} y={s.y + r + 16} fill="#7a6f63"
+                  fontFamily="JetBrains Mono, monospace"
+                  fontSize={9} textAnchor="middle" letterSpacing={0.5}>
+                  {s.year}
+                </text>
+              </g>
+            );
+          })}
+
+          {/* Tradition labels at right */}
+          {TRAD_ORDER.map(tradId => {
+            const list = stations.filter(s => s.tradition === tradId).sort((a,b)=>a.x-b.x);
+            if (list.length === 0) return null;
+            return (
+              <text key={`lbl-${tradId}`}
+                x={list[list.length-1].x + 80} y={ROW_Y[tradId]+5}
+                fill={TRADITIONS[tradId].color}
+                fontFamily="Plus Jakarta Sans, sans-serif"
+                fontSize={12} fontWeight={700} letterSpacing={1.2}>
+                {TRADITIONS[tradId].label.toUpperCase()}
+              </text>
+            );
+          })}
+        </svg>
+      </div>
+
+      {hoveredObj && (
+        <div className="map-hover-card" style={{ borderTopColor: TRADITIONS[hoveredObj.tradition].color }}>
+          {hasPortrait(hoveredObj) && (
+            <img src={portraitURL(hoveredObj.id)} alt=""
+              className="map-hover-portrait"
+              style={{ borderColor: TRADITIONS[hoveredObj.tradition].color }} />
+          )}
+          <div className="map-hover-meta" style={{ color: TRADITIONS[hoveredObj.tradition].color }}>
+            {TRADITIONS[hoveredObj.tradition].label} · {hoveredObj.year}
+          </div>
+          <div className="map-hover-name">
+            {hoveredObj.kind ? <em>{hoveredObj.first} {hoveredObj.last}</em> : `${hoveredObj.first} ${hoveredObj.last}`}
+          </div>
+          <p className="map-hover-bio">{hoveredObj.bio}</p>
+          <div className="map-hover-note">
+            {hoveredObj.kind
+              ? KIND_NOTES[hoveredObj.kind]
+              : CONFIDENCE_NOTES[getConfidence(hoveredObj)]}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+// ============================================================
+// COMPOSITION — set the room. Half-second of stillness held.
+// ============================================================
+function CompositionScreen({ slotAObj, slotBObj, topic, setTopic, onBegin, onSwapA, onSwapB, onLeave }) {
+  const tradA = slotAObj ? TRADITIONS[slotAObj.tradition] : null;
+  const tradB = slotBObj ? TRADITIONS[slotBObj.tradition] : null;
+
+  // Half-second stillness: action elements hold opacity 0 then fade in
+  const [actionsReady, setActionsReady] = useState(false);
+  useEffect(() => {
+    setActionsReady(false);
+    const t = setTimeout(() => setActionsReady(true), 700);
+    return () => clearTimeout(t);
+  }, [slotAObj?.id, slotBObj?.id]);
+
+  const suggestions = ["the brief", "creativity", "what counts as proof", "attention", "what research should do"];
+
+  if (!slotAObj || !slotBObj) {
+    return (
+      <section className="composition">
+        <p className="composition-empty">Pick two figures to set the room.</p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="composition">
+      <div className="composition-room">
+        <div className="composition-figure composition-figure-a" style={{ ['--trad']: tradA.color }}>
+          <button className="composition-figure-btn" onClick={onSwapA} aria-label="Change participant A">
+            {hasPortrait(slotAObj) && (
+              <img src={portraitURL(slotAObj.id)} alt=""
+                className="composition-portrait"
+                style={{ borderColor: tradA.color }} />
+            )}
+            <div className="composition-meta">{tradA.label}</div>
+            <div className="composition-name">
+              <span className="composition-first">{slotAObj.first}</span>
+              <span className="composition-last">{slotAObj.last}</span>
+            </div>
+            <div className="composition-year">{slotAObj.year}</div>
+            <div className="composition-swap">change</div>
+          </button>
+          <ConfidenceNote conf={getConfidence(slotAObj)} align="right" />
+        </div>
+
+        <div className="composition-divider">
+          <div className="composition-divider-bar" style={{ background:`linear-gradient(to right, ${tradA.color}, ${tradB.color})` }} />
+          <div className="composition-amp">&middot;</div>
+        </div>
+
+        <div className="composition-figure composition-figure-b" style={{ ['--trad']: tradB.color }}>
+          <button className="composition-figure-btn" onClick={onSwapB} aria-label="Change participant B">
+            {hasPortrait(slotBObj) && (
+              <img src={portraitURL(slotBObj.id)} alt=""
+                className="composition-portrait"
+                style={{ borderColor: tradB.color }} />
+            )}
+            <div className="composition-meta">{tradB.label}</div>
+            <div className="composition-name">
+              <span className="composition-first">{slotBObj.first}</span>
+              <span className="composition-last">{slotBObj.last}</span>
+            </div>
+            <div className="composition-year">{slotBObj.year}</div>
+            <div className="composition-swap">change</div>
+          </button>
+          <ConfidenceNote conf={getConfidence(slotBObj)} align="left" />
+        </div>
+      </div>
+
+      <div className={`composition-actions ${actionsReady ? "is-ready" : ""}`}>
+        <p className="composition-prompt">What should they argue about?</p>
+        <input
+          className="composition-input"
+          placeholder="Or leave blank, and a topic will choose itself."
+          value={topic}
+          onChange={(e) => setTopic(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") onBegin(); }}
+          autoFocus
+        />
+        <ul className="composition-suggestions">
+          {suggestions.map(s => (
+            <li key={s}>
+              <button className="composition-suggestion" onClick={() => { setTopic(s); }}>
+                {s}
+              </button>
+            </li>
+          ))}
+        </ul>
+        <button className="composition-begin" onClick={onBegin}>
+          Begin <span className="composition-arrow">→</span>
+        </button>
+      </div>
+    </section>
+  );
+}
+
+// ============================================================
+// EXCHANGE — the conversation. Turns arrive in time.
+// ============================================================
+function ExchangeScreen({
+  slotAObj, slotBObj, exchange, visibleTurns, loadingText, error,
+  followUpFor, followUpText, setFollowUpFor, setFollowUpText, onSubmitFollowUp,
+  onContinue, onPushBack, onChangeRoom, onLeave, onExport, exportFeedback,
+  roomCard, scoringInFlight, onPushHarder, onNewQuestion, roundCount, priorRoomScore,
+}) {
+  const tradA = slotAObj ? TRADITIONS[slotAObj.tradition] : null;
+  const tradB = slotBObj ? TRADITIONS[slotBObj.tradition] : null;
+
+  // Determine the speaker of the most recent revealed turn (for dimming)
+  const allTurnsRevealed = exchange && visibleTurns >= exchange.turns.length;
+  const lastRevealed = exchange && visibleTurns > 0 ? exchange.turns[visibleTurns-1] : null;
+  const lastSpeakerId = lastRevealed ? lastRevealed.speaker : null;
+  const dimA = !!lastSpeakerId && lastSpeakerId !== "A" && lastSpeakerId !== "host" && !allTurnsRevealed;
+  const dimB = !!lastSpeakerId && lastSpeakerId !== "B" && lastSpeakerId !== "host" && !allTurnsRevealed;
+
+  const transcriptRef = useRef(null);
+  // Auto-scroll latest turn into view
+  useEffect(() => {
+    if (transcriptRef.current && visibleTurns > 0) {
+      const last = transcriptRef.current.querySelector('.turn:last-child');
+      if (last) last.scrollIntoView({ behavior: "smooth", block: "end" });
+    }
+  }, [visibleTurns]);
+
+  if (!slotAObj || !slotBObj) return null;
+
+  return (
+    <section className="exchange">
+      <header className="exchange-masthead">
+        <ParticipantLine thinker={slotAObj} trad={tradA} dim={dimA} align="left" />
+        <div className="exchange-topic">
+          <div className="exchange-topic-label">In conversation</div>
+          {exchange?.topic ? (
+            <div className="exchange-topic-text">{exchange.topic}</div>
+          ) : (
+            <div className="exchange-topic-text exchange-topic-pending">&middot;&middot;&middot;</div>
+          )}
+        </div>
+        <ParticipantLine thinker={slotBObj} trad={tradB} dim={dimB} align="right" />
+      </header>
+
+      <p className="exchange-disclaimer">
+        Reconstructions. Positions drawn from published work, voices approximated. Informed pastiche, not direct quotation.
+      </p>
+
+      {exchange?.context && (
+        <div className="exchange-context">
+          <div className="exchange-context-label">A primer, before they begin</div>
+          <p className="exchange-context-body">{exchange.context}</p>
+        </div>
+      )}
+
+      <div className="exchange-body" ref={transcriptRef}>
+        {error && <p className="exchange-error">{error}</p>}
+
+        {!exchange && loadingText && (
+          <div className="exchange-loading">
+            <p>{loadingText}</p>
+          </div>
+        )}
+
+        {exchange && exchange.turns.slice(0, visibleTurns).map((turn, i) => {
+          if (turn.speaker === "host") {
+            return <HostTurn key={i} text={turn.text} target={turn.target} />;
+          }
+          const speaker = turn.speaker === "A" ? slotAObj : slotBObj;
+          const trad = TRADITIONS[speaker.tradition];
+          return <Turn key={i} turn={turn} speaker={speaker} trad={trad} />;
+        })}
+
+        {exchange && loadingText && (
+          <div className="exchange-loading exchange-loading-inline">
+            <p>{loadingText}</p>
+          </div>
+        )}
+      </div>
+
+      {exchange && allTurnsRevealed && !loadingText && (
+        <ReportCard
+          card={roomCard}
+          loading={scoringInFlight}
+          slotAObj={slotAObj}
+          slotBObj={slotBObj}
+          tradA={tradA}
+          tradB={tradB}
+          roundCount={roundCount}
+          priorRoomScore={priorRoomScore}
+          turns={exchange.turns}
+        />
+      )}
+
+      {exchange && allTurnsRevealed && !loadingText && (
+        <footer className="exchange-controls">
+          {followUpFor ? (
+            <div className="followup">
+              <div className="followup-label">
+                Question for <strong style={{ color: TRADITIONS[(followUpFor === "A" ? slotAObj : slotBObj).tradition].color }}>
+                  {(followUpFor === "A" ? slotAObj : slotBObj).last}
+                </strong>
+              </div>
+              <input
+                className="followup-input"
+                value={followUpText}
+                onChange={(e)=>setFollowUpText(e.target.value)}
+                onKeyDown={(e)=>{ if(e.key==="Enter") onSubmitFollowUp(); }}
+                placeholder="Ask whatever is sharper than what they just said."
+                autoFocus
+              />
+              <div className="followup-actions">
+                <button className="followup-submit" onClick={onSubmitFollowUp} disabled={!followUpText.trim()}>
+                  Ask <span>→</span>
+                </button>
+                <button className="aoa-link aoa-link-quiet" onClick={() => { setFollowUpFor(null); setFollowUpText(""); }}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="exchange-controls-row">
+              {roomCard && (
+                <>
+                  <button className="ctrl ctrl-primary" onClick={onPushHarder} disabled={!roomCard}>
+                    Push them harder
+                  </button>
+                  <button className="ctrl" onClick={onNewQuestion}>
+                    New question, same pair
+                  </button>
+                  <span className="ctrl-divider" />
+                </>
+              )}
+              <button className="ctrl" onClick={onContinue}>Continue</button>
+              <button className="ctrl" onClick={onPushBack}>Push back</button>
+              <button className="ctrl" onClick={() => { setFollowUpFor("A"); }}>
+                Ask <span style={{ color: tradA.color }}>{slotAObj.last}</span>
+              </button>
+              <button className="ctrl" onClick={() => { setFollowUpFor("B"); }}>
+                Ask <span style={{ color: tradB.color }}>{slotBObj.last}</span>
+              </button>
+              <span className="ctrl-divider" />
+              <button className="ctrl ctrl-export" onClick={onExport}>
+                {exportFeedback ? <em>{exportFeedback}</em> : "Take it with you"}
+              </button>
+              <button className="aoa-link aoa-link-quiet" onClick={onChangeRoom}>Change room</button>
+            </div>
+          )}
+        </footer>
+      )}
+    </section>
+  );
+}
+
+// ============================================================
+// SUB-COMPONENTS
+// ============================================================
+function ConfidenceNote({ conf, align }) {
+  const [open, setOpen] = useState(false);
+  if (!conf) return null;
+  return (
+    <div className={`confidence-note conf-${align}`}>
+      <button
+        className="confidence-trigger"
+        onMouseEnter={() => setOpen(true)}
+        onMouseLeave={() => setOpen(false)}
+        onClick={(e) => { e.stopPropagation(); setOpen(o => !o); }}
+        aria-expanded={open}
+      >
+        {CONFIDENCE_NOTES[conf]} <span className="confidence-mark">?</span>
+      </button>
+      {open && (
+        <div className="confidence-tip" role="tooltip">
+          {CONFIDENCE_EXPLANATIONS[conf]}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MobileMapList({ slotA, slotB, onTap }) {
+  return (
+    <div className="map-list">
+      {TRAD_ORDER.map(tradId => {
+        const items = THINKERS.filter(t => t.tradition === tradId);
+        if (items.length === 0) return null;
+        const trad = TRADITIONS[tradId];
+        return (
+          <div key={tradId} className="map-list-section">
+            <div className="map-list-tradition" style={{ color: trad.color, borderBottomColor: trad.color }}>
+              {trad.label}
+            </div>
+            <ul className="map-list-items">
+              {items.map(t => {
+                const selected = t.id === slotA || t.id === slotB;
+                const slotLabel = t.id === slotA ? "A" : t.id === slotB ? "B" : null;
+                const conf = getConfidence(t);
+                const portrait = hasPortrait(t);
+                return (
+                  <li key={t.id} className={`map-list-item ${selected ? "is-selected" : ""} ${t.kind ? "is-kind" : ""}`}>
+                    <button
+                      onClick={() => onTap(t.id)}
+                      disabled={!!t.kind}
+                      className="map-list-btn"
+                      style={selected ? { background: trad.color, color: "#fff" } : {}}
+                    >
+                      {portrait && (
+                        <img
+                          src={portraitURL(t.id)}
+                          alt=""
+                          className="map-list-portrait"
+                          style={{ borderColor: trad.color }}
+                        />
+                      )}
+                      <div className="map-list-name">
+                        {t.kind
+                          ? <em>{t.first} {t.last}</em>
+                          : <strong>{t.first} {t.last}</strong>}
+                      </div>
+                      <div className="map-list-meta">
+                        <span>{t.year}</span>
+                        {t.kind ? (
+                          <span className="map-list-note">{KIND_NOTES[t.kind]}</span>
+                        ) : conf ? (
+                          <span className="map-list-note">{CONFIDENCE_NOTES[conf]}</span>
+                        ) : null}
+                      </div>
+                      {slotLabel && <div className="map-list-slot">{slotLabel}</div>}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function ParticipantLine({ thinker, trad, dim, align }) {
+  const portrait = hasPortrait(thinker);
+  return (
+    <div className={`participant ${dim ? "is-dim" : ""} part-${align}`} style={{ ['--trad']: trad.color, textAlign: align }}>
+      {portrait && (
+        <img
+          src={portraitURL(thinker.id)}
+          alt=""
+          className="participant-portrait"
+          style={{ borderColor: trad.color }}
+        />
+      )}
+      <div className="participant-meta">{trad.label}</div>
+      <div className="participant-name">
+        <span className="participant-first">{thinker.first}</span>
+        <span className="participant-last">{thinker.last}</span>
+      </div>
+      <div className="participant-year">{thinker.year}</div>
+    </div>
+  );
+}
+
+function Turn({ turn, speaker, trad }) {
+  const isA = turn.speaker === "A";
+  const portrait = hasPortrait(speaker);
+  return (
+    <article className={`turn ${isA ? "turn-a" : "turn-b"}`} style={{ ['--trad']: trad.color }}>
+      <header className="turn-header">
+        {portrait && (
+          <img
+            src={portraitURL(speaker.id)}
+            alt=""
+            className="turn-portrait"
+            style={{ borderColor: trad.color }}
+          />
+        )}
+        <span className="turn-name">{speaker.last}</span>
+        <span className="turn-meta">{speaker.year} &middot; {trad.label}</span>
+      </header>
+      <p className="turn-body">{turn.text}</p>
+    </article>
+  );
+}
+
+// ============================================================
+// REPORT CARD — appears after each exchange. Two scores, one move,
+// open ground for both. Editorial register, real visualisation,
+// no celebration. Reads like a chess match score sheet.
+// ============================================================
+function ReportCard({ card, loading, slotAObj, slotBObj, tradA, tradB, roundCount, priorRoomScore, turns }) {
+  if (loading) {
+    return (
+      <div className="report-card report-card-loading">
+        <div className="report-card-label">Scoring the exchange&hellip;</div>
+      </div>
+    );
+  }
+  if (!card) return null;
+
+  const moveTurnIdx = card.moveOfRound?.turnIndex ? card.moveOfRound.turnIndex - 1 : null;
+  const moveSpeaker = card.moveOfRound?.speaker;
+  const moveSpeakerObj = moveSpeaker === "A" ? slotAObj : moveSpeaker === "B" ? slotBObj : null;
+  const moveTrad = moveSpeaker === "A" ? tradA : moveSpeaker === "B" ? tradB : null;
+  const delta = (priorRoomScore !== null && priorRoomScore !== undefined)
+    ? card.roomScore - priorRoomScore
+    : null;
+
+  return (
+    <section className="report-card" aria-label="Report card">
+      <header className="report-card-head">
+        <div className="report-card-label">
+          {roundCount > 1 ? `Round ${roundCount} \u00b7 Report card` : "Report card"}
+        </div>
+        {delta !== null && (
+          <div className={`report-card-delta ${delta > 0 ? "is-up" : delta < 0 ? "is-down" : "is-flat"}`}>
+            {delta > 0 ? `+${delta}` : delta} from prior round
+          </div>
+        )}
+      </header>
+
+      <div className="report-card-body">
+        {/* Room Score with radar */}
+        <div className="report-block report-block-room">
+          <div className="report-block-label">Room Score</div>
+          <div className="report-room-score-row">
+            <div className="report-score-numeral">{card.roomScore}</div>
+            <RadarChart rubric={card.rubric} />
+          </div>
+          {card.roomNote && <p className="report-block-note">{card.roomNote}</p>}
+        </div>
+
+        {/* Voice Fidelity bars */}
+        <div className="report-block report-block-fidelity">
+          <div className="report-block-label">Voice Fidelity</div>
+          <FidelityBar thinker={slotAObj} trad={tradA} score={card.voiceFidelityA} note={card.voiceNoteA} />
+          <FidelityBar thinker={slotBObj} trad={tradB} score={card.voiceFidelityB} note={card.voiceNoteB} />
+        </div>
+      </div>
+
+      {/* Move of the round */}
+      {card.moveOfRound && (
+        <div className="report-move">
+          <div className="report-block-label">Move of the round</div>
+          {card.moveOfRound.quote && (
+            <blockquote className="report-move-quote" style={moveTrad ? { borderLeftColor: moveTrad.color } : {}}>
+              &ldquo;{card.moveOfRound.quote}&rdquo;
+            </blockquote>
+          )}
+          <div className="report-move-credit">
+            {moveSpeakerObj ? (
+              <>
+                <span style={moveTrad ? { color: moveTrad.color } : {}}>
+                  {moveSpeakerObj.last}
+                </span>
+                {moveTurnIdx !== null && <span>, turn {card.moveOfRound.turnIndex}</span>}
+              </>
+            ) : null}
+            {card.moveOfRound.reason && <em> &mdash; {card.moveOfRound.reason}</em>}
+          </div>
+        </div>
+      )}
+
+      {/* Open ground */}
+      {(card.openGroundA || card.openGroundB) && (
+        <div className="report-open">
+          <div className="report-block-label">Open ground</div>
+          <div className="report-open-rows">
+            {card.openGroundA && (
+              <div className="report-open-row">
+                <span className="report-open-name" style={{ color: tradA.color }}>{slotAObj.last}</span>
+                <em>{card.openGroundA}</em>
+              </div>
+            )}
+            {card.openGroundB && (
+              <div className="report-open-row">
+                <span className="report-open-name" style={{ color: tradB.color }}>{slotBObj.last}</span>
+                <em>{card.openGroundB}</em>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+// Small radar chart for the five rubric dimensions, 0-20 each.
+function RadarChart({ rubric }) {
+  if (!rubric) return null;
+  const dims = [
+    { key: "engagement", label: "ENGAGE" },
+    { key: "specificity", label: "SPECIFIC" },
+    { key: "concession", label: "CONCEDE" },
+    { key: "escalation", label: "ESCALATE" },
+    { key: "productiveness", label: "PRODUCT" },
+  ];
+  const size = 180;
+  const cx = size / 2;
+  const cy = size / 2;
+  const maxR = 62;
+  const max = 20;
+  const angle = (i) => (Math.PI * 2 * i) / dims.length - Math.PI / 2;
+
+  // Concentric grid rings at 5, 10, 15, 20
+  const rings = [5, 10, 15, 20].map(level => {
+    const r = (level / max) * maxR;
+    const points = dims.map((_, i) =>
+      `${cx + r * Math.cos(angle(i))},${cy + r * Math.sin(angle(i))}`
+    ).join(" ");
+    return points;
+  });
+
+  // Axis lines
+  const axes = dims.map((_, i) => ({
+    x: cx + maxR * Math.cos(angle(i)),
+    y: cy + maxR * Math.sin(angle(i)),
+  }));
+
+  // Data polygon
+  const dataPoints = dims.map((d, i) => {
+    const v = Math.max(0, Math.min(max, rubric[d.key] || 0));
+    const r = (v / max) * maxR;
+    return `${cx + r * Math.cos(angle(i))},${cy + r * Math.sin(angle(i))}`;
+  }).join(" ");
+
+  // Labels just outside the chart
+  const labels = dims.map((d, i) => {
+    const r = maxR + 14;
+    return {
+      x: cx + r * Math.cos(angle(i)),
+      y: cy + r * Math.sin(angle(i)),
+      text: d.label,
+      value: rubric[d.key] || 0,
+    };
+  });
+
+  return (
+    <svg className="report-radar" viewBox={`0 0 ${size} ${size}`} width={size} height={size}>
+      {/* grid rings */}
+      {rings.map((points, i) => (
+        <polygon key={i} points={points}
+          fill="none" stroke="#d8cfbf" strokeWidth="1"
+          opacity={i === 3 ? 0.7 : 0.35} />
+      ))}
+      {/* axes */}
+      {axes.map((a, i) => (
+        <line key={i} x1={cx} y1={cy} x2={a.x} y2={a.y}
+          stroke="#d8cfbf" strokeWidth="1" opacity="0.5" />
+      ))}
+      {/* data polygon */}
+      <polygon points={dataPoints}
+        fill="#1a1614" fillOpacity="0.08"
+        stroke="#1a1614" strokeWidth="1.5" />
+      {/* data points */}
+      {dims.map((d, i) => {
+        const v = Math.max(0, Math.min(max, rubric[d.key] || 0));
+        const r = (v / max) * maxR;
+        return (
+          <circle key={i}
+            cx={cx + r * Math.cos(angle(i))}
+            cy={cy + r * Math.sin(angle(i))}
+            r="2.5" fill="#1a1614" />
+        );
+      })}
+      {/* labels */}
+      {labels.map((l, i) => (
+        <g key={i}>
+          <text x={l.x} y={l.y} fill="#7a6f63"
+            fontFamily="JetBrains Mono, monospace" fontSize="8"
+            textAnchor="middle" dominantBaseline="middle"
+            letterSpacing="0.08em">
+            {l.text}
+          </text>
+          <text x={l.x} y={l.y + 9} fill="#1a1614"
+            fontFamily="JetBrains Mono, monospace" fontSize="9"
+            fontWeight="600"
+            textAnchor="middle" dominantBaseline="middle">
+            {l.value}
+          </text>
+        </g>
+      ))}
+    </svg>
+  );
+}
+
+function FidelityBar({ thinker, trad, score, note }) {
+  if (!thinker) return null;
+  const pct = Math.max(0, Math.min(100, score || 0));
+  return (
+    <div className="fidelity-bar">
+      <div className="fidelity-bar-head">
+        {hasPortrait(thinker) && (
+          <img src={portraitURL(thinker.id)} alt=""
+            className="fidelity-bar-portrait"
+            style={{ borderColor: trad.color }} />
+        )}
+        <div className="fidelity-bar-meta">
+          <div className="fidelity-bar-name">{thinker.last}</div>
+          {note && <div className="fidelity-bar-note">{note}</div>}
+        </div>
+        <div className="fidelity-bar-score">{score}</div>
+      </div>
+      <div className="fidelity-bar-track">
+        <div className="fidelity-bar-fill"
+          style={{ width: `${pct}%`, background: trad.color }} />
+      </div>
+    </div>
+  );
+}
+
+function HostTurn({ text, target }) {
+  return (
+    <div className="host-turn">
+      <div className="host-turn-label">Host, to {target}</div>
+      <p className="host-turn-body">{text}</p>
+    </div>
+  );
+}
+
+// ============================================================
+// GLOBAL STYLE
+// ============================================================
+function GlobalStyle() {
+  return (
+    <style>{`
+      @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400;1,9..144,500&family=Plus+Jakarta+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+      *, *::before, *::after { box-sizing: border-box; }
+      body { margin: 0; }
+
+      .aoa-root {
+        --bg: #f4efe4;
+        --bg-warm: #faf6ed;
+        --paper: #fdfaf2;
+        --ink: #1a1614;
+        --ink-quiet: #4a423b;
+        --mid: #7a6f63;
+        --whisper: #b5a89a;
+        --rule: rgba(26,22,20,0.12);
+        background: var(--bg);
+        color: var(--ink);
+        min-height: 100vh;
+        font-family: 'Fraunces', Georgia, serif;
+        font-feature-settings: "ss01", "onum";
+        font-variant-numeric: oldstyle-nums;
+      }
+
+      /* ---- Shell ---- */
+      .aoa-header {
+        display: flex; align-items: baseline; justify-content: space-between;
+        padding: 22px 40px; border-bottom: 1px solid var(--rule);
+        position: sticky; top: 0; background: var(--bg); z-index: 10;
+        backdrop-filter: blur(6px);
+      }
+      .aoa-wordmark {
+        background: none; border: none; padding: 0; cursor: pointer;
+        font-family: 'Fraunces', serif; font-size: 17px; font-weight: 500;
+        color: var(--ink); font-variation-settings: "opsz" 24;
+        letter-spacing: -0.005em;
+      }
+      .aoa-wordmark-the {
+        font-style: italic; font-weight: 400; color: var(--mid); margin-right: 4px;
+      }
+      .aoa-nav { display: flex; gap: 22px; }
+      .aoa-link {
+        background: none; border: none; padding: 0; cursor: pointer;
+        font-family: 'Fraunces', serif; font-size: 14px; font-style: italic;
+        color: var(--mid); transition: color 0.2s;
+      }
+      .aoa-link:hover { color: var(--ink); }
+      .aoa-link-quiet { font-size: 13px; color: var(--mid); }
+      .aoa-main { padding: 0; }
+
+      /* ---- Arrival ---- */
+      .arrival {
+        min-height: calc(100vh - 70px);
+        display: flex; align-items: center; justify-content: center;
+        padding: 80px 40px;
+      }
+      .arrival-inner {
+        max-width: 720px; width: 100%;
+        animation: arrivalFade 1.2s ease 0.1s both;
+      }
+      @keyframes arrivalFade { from { opacity: 0; } to { opacity: 1; } }
+
+      .arrival-question {
+        font-family: 'Fraunces', serif;
+        font-size: clamp(40px, 5.6vw, 72px);
+        font-weight: 400;
+        font-variation-settings: "opsz" 144;
+        letter-spacing: -0.025em;
+        line-height: 1.02; color: var(--ink); margin: 0 0 16px;
+        max-width: 14ch;
+      }
+      .arrival-sub {
+        font-family: 'Fraunces', serif; font-style: italic;
+        font-size: 18px; color: var(--mid); margin: 0 0 56px;
+        font-variation-settings: "opsz" 24;
+      }
+
+      .arrival-pairs { list-style: none; padding: 0; margin: 0; }
+      .arrival-pair:last-child { border-bottom: none; }
+      .arrival-pair {
+        border-top: 1px solid var(--rule);
+        opacity: 0;
+        animation: pairFade 0.9s ease both;
+      }
+      @keyframes pairFade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+      .arrival-pair-btn {
+        background: none; border: none; padding: 28px 4px;
+        width: 100%; text-align: left; cursor: pointer;
+        display: block; font-family: inherit; color: inherit;
+        transition: padding-left 0.3s ease;
+      }
+      .arrival-pair-btn:hover { padding-left: 16px; }
+      .arrival-pair-question {
+        font-family: 'Fraunces', serif;
+        font-size: clamp(28px, 3.4vw, 40px);
+        font-weight: 500;
+        font-variation-settings: "opsz" 56;
+        letter-spacing: -0.02em; line-height: 1.04;
+        color: var(--ink);
+        margin-bottom: 10px;
+      }
+      .arrival-pair-credit {
+        font-family: 'Fraunces', serif;
+        font-size: 16px;
+        font-variation-settings: "opsz" 18;
+        line-height: 1.55;
+      }
+      .arrival-pair-credit > span:not(.arrival-pair-amp):not(.arrival-pair-year) {
+        font-weight: 500;
+      }
+      .arrival-pair-amp { color: var(--whisper); font-weight: 300; }
+      .arrival-pair-year {
+        color: var(--mid); font-size: 13px;
+        font-family: 'JetBrains Mono', monospace;
+        letter-spacing: 0.02em;
+      }
+      .arrival-pair-subtitle {
+        color: var(--mid); font-style: italic;
+        font-size: 15px;
+        font-variation-settings: "opsz" 18;
+      }
+
+      .arrival-section-label {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase;
+        color: var(--mid);
+        padding-bottom: 14px;
+        margin-bottom: 0;
+        border-bottom: 1px solid var(--rule);
+        opacity: 0; animation: pairFade 0.9s ease 0.3s both;
+      }
+
+      .arrival-map-cta {
+        display: block; width: 100%;
+        background: none; border: none; padding: 32px 4px;
+        cursor: pointer; text-align: left;
+        font-family: inherit; color: inherit;
+        border-bottom: 1px solid var(--rule);
+        opacity: 0; animation: pairFade 0.9s ease 0.85s both;
+        transition: padding-left 0.3s ease;
+      }
+      .arrival-map-cta:hover { padding-left: 16px; }
+      .arrival-map-cta-line {
+        font-family: 'Fraunces', serif;
+        font-size: clamp(22px, 2.6vw, 30px);
+        font-weight: 400; font-style: italic;
+        font-variation-settings: "opsz" 36;
+        letter-spacing: -0.015em; line-height: 1.1;
+        color: var(--ink-quiet);
+        margin-bottom: 8px;
+      }
+      .arrival-map-cta-sub {
+        font-family: 'Fraunces', serif;
+        font-size: 14px; color: var(--mid);
+        font-variation-settings: "opsz" 14;
+      }
+      .arrival-map-cta:hover .arrival-map-cta-line { color: var(--ink); }
+      .arrival-map-cta:hover .arrival-arrow { transform: translateX(4px); }
+      .arrival-arrow { display: inline-block; margin-left: 6px; transition: transform 0.2s; }
+
+      .arrival-map-link, .arrival-starter { display: none; }
+
+      .arrival-about {
+        margin-top: 64px;
+        max-width: 480px;
+        opacity: 0; animation: pairFade 0.9s ease 1.05s both;
+      }
+      .arrival-about p {
+        font-family: 'Fraunces', serif; font-style: italic;
+        font-size: 14px; line-height: 1.65;
+        color: var(--mid);
+        font-variation-settings: "opsz" 14;
+        margin: 0;
+      }
+
+      /* ---- Mobile map list ---- */
+      .map-list { display: none; max-width: 720px; margin: 0 auto; }
+      .map-list-section { margin-bottom: 32px; }
+      .map-list-tradition {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase;
+        font-weight: 700;
+        padding-bottom: 10px; margin-bottom: 12px;
+        border-bottom: 2px solid;
+      }
+      .map-list-items { list-style: none; padding: 0; margin: 0; }
+      .map-list-item { border-bottom: 1px solid var(--rule); }
+      .map-list-btn {
+        display: flex; align-items: center; gap: 14px;
+        width: 100%; background: none; border: none;
+        padding: 14px 12px; cursor: pointer;
+        font-family: inherit; color: var(--ink); text-align: left;
+        transition: background 0.15s;
+      }
+      .map-list-btn:not(:disabled):hover { background: rgba(26,22,20,0.04); }
+      .map-list-btn:disabled { cursor: default; opacity: 0.55; }
+      .map-list-name {
+        font-family: 'Fraunces', serif; font-size: 18px;
+        flex: 1 1 auto;
+        font-variation-settings: "opsz" 24;
+      }
+      .map-list-name strong { font-weight: 500; letter-spacing: -0.01em; }
+      .map-list-name em { font-weight: 400; font-style: italic; color: var(--mid); }
+      .map-list-meta {
+        text-align: right; flex: 0 0 auto;
+        display: flex; flex-direction: column; align-items: flex-end; gap: 2px;
+      }
+      .map-list-meta > span:first-child {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 11px; color: var(--mid); letter-spacing: 0.05em;
+      }
+      .map-list-note {
+        font-family: 'Fraunces', serif; font-style: italic;
+        font-size: 11px; color: var(--whisper);
+        font-variation-settings: "opsz" 12;
+      }
+      .map-list-slot {
+        flex: 0 0 auto;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 11px; font-weight: 700; color: #fff;
+        background: var(--ink); padding: 2px 8px;
+        border-radius: 2px;
+      }
+      .map-list-item.is-selected .map-list-name strong { color: #fff; }
+      .map-list-item.is-selected .map-list-meta > span:first-child { color: rgba(255,255,255,0.75); }
+      .map-list-item.is-selected .map-list-note { color: rgba(255,255,255,0.7); }
+
+      @media (max-width: 720px) {
+        .map-svg-wrapper { display: none; }
+        .map-list { display: block; }
+        .aoa-header { padding: 18px 24px; }
+        .aoa-wordmark { font-size: 14px; }
+        .arrival-pair-names { font-size: 22px; }
+        .arrival-pair-topic { font-size: 14px; }
+        .arrival-pair-btn { flex-direction: column; align-items: flex-start; gap: 4px; padding: 22px 4px; }
+        .composition-room { grid-template-columns: 1fr; gap: 32px; }
+        .composition-figure-a, .composition-figure-b { text-align: center; }
+        .composition-divider { transform: rotate(90deg); }
+        .exchange-masthead { grid-template-columns: 1fr; gap: 18px; text-align: left; }
+        .turn-a, .turn-b { padding-left: 0; padding-right: 0; }
+      }
+
+      /* ---- Confidence tooltip ---- */
+      .confidence-note {
+        position: relative;
+        margin-top: 8px;
+        text-align: inherit;
+      }
+      .conf-right { text-align: right; }
+      .conf-left { text-align: left; }
+      .confidence-trigger {
+        background: none; border: none; padding: 4px 0; cursor: pointer;
+        font-family: 'Fraunces', serif; font-style: italic;
+        font-size: 12px; color: var(--mid); opacity: 0.75;
+        font-variation-settings: "opsz" 14;
+        transition: opacity 0.2s, color 0.2s;
+      }
+      .confidence-trigger:hover { opacity: 1; color: var(--ink-quiet); }
+      .confidence-mark {
+        display: inline-block;
+        margin-left: 4px; padding: 0 5px;
+        border: 1px solid currentColor;
+        border-radius: 50%;
+        font-size: 9px; font-style: normal;
+        font-family: 'JetBrains Mono', monospace;
+        opacity: 0.6;
+      }
+      .confidence-tip {
+        position: absolute;
+        top: 100%; margin-top: 6px;
+        max-width: 240px; min-width: 220px;
+        background: var(--ink); color: var(--bg);
+        padding: 12px 14px;
+        font-family: 'Fraunces', serif;
+        font-size: 12px; line-height: 1.5;
+        font-variation-settings: "opsz" 14;
+        z-index: 30;
+        box-shadow: 0 8px 24px rgba(26,22,20,0.18);
+        animation: keygateFade 0.2s ease both;
+      }
+      .conf-right .confidence-tip { right: 0; }
+      .conf-left .confidence-tip { left: 0; }
+
+      /* ---- Exchange context primer ---- */
+      .exchange-context {
+        margin: 0 auto 48px;
+        max-width: 640px;
+        padding: 24px 28px;
+        background: var(--paper);
+        border-left: 3px solid var(--whisper);
+      }
+      .exchange-context-label {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 9px; letter-spacing: 0.22em; text-transform: uppercase;
+        color: var(--mid); margin-bottom: 10px;
+      }
+      .exchange-context-body {
+        font-family: 'Fraunces', serif; font-style: italic;
+        font-size: 16px; line-height: 1.6; color: var(--ink-quiet);
+        margin: 0;
+        font-variation-settings: "opsz" 18;
+      }
+
+      /* ---- Export control ---- */
+      .ctrl-export em { font-style: italic; color: var(--mid); font-size: 13px; }
+
+      /* ---- Map screen ---- */
+      .map-screen { padding: 32px 40px 80px; }
+      .map-prelude {
+        display: flex; align-items: baseline; justify-content: space-between;
+        max-width: 720px; margin: 0 auto 32px;
+        animation: arrivalFade 0.6s ease both;
+      }
+      .map-prelude-text {
+        font-family: 'Fraunces', serif; font-style: italic;
+        font-size: 16px; color: var(--mid); margin: 0;
+        font-variation-settings: "opsz" 24;
+      }
+      .map-scroll {
+        overflow-x: auto; padding-bottom: 24px;
+        animation: arrivalFade 0.8s ease 0.1s both;
+      }
+      .map-scroll::-webkit-scrollbar { height: 8px; }
+      .map-scroll::-webkit-scrollbar-thumb { background: rgba(26,22,20,0.2); border-radius: 4px; }
+      .map-svg { width: ${VIEWBOX_W}px; min-width: 1200px; height: auto; display: block; }
+
+      .map-hover-card {
+        position: fixed; top: 92px; right: 32px; width: 320px;
+        background: var(--paper);
+        border: 1px solid var(--rule);
+        border-top: 4px solid;
+        padding: 22px 24px;
+        z-index: 50;
+        box-shadow: 0 12px 40px rgba(26,22,20,0.08);
+        animation: arrivalFade 0.3s ease both;
+      }
+      .map-hover-meta {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase;
+        margin-bottom: 6px;
+      }
+      .map-hover-name {
+        font-family: 'Fraunces', serif; font-size: 26px; font-weight: 500;
+        line-height: 1.0; margin-bottom: 12px;
+        font-variation-settings: "opsz" 36;
+        letter-spacing: -0.015em;
+      }
+      .map-hover-bio {
+        font-family: 'Fraunces', serif; font-size: 14px;
+        line-height: 1.55; color: var(--ink-quiet); margin: 0;
+        font-variation-settings: "opsz" 14;
+      }
+      .map-hover-note {
+        margin-top: 14px; padding-top: 12px;
+        border-top: 1px solid var(--rule);
+        font-family: 'Fraunces', serif; font-style: italic;
+        font-size: 12px; color: var(--mid);
+        font-variation-settings: "opsz" 14;
+      }
+
+      /* ---- Composition ---- */
+      .composition {
+        min-height: calc(100vh - 70px);
+        display: flex; flex-direction: column; align-items: center;
+        justify-content: center; padding: 60px 40px;
+        background: var(--bg-warm);
+      }
+      .composition-empty {
+        font-family: 'Fraunces', serif; font-style: italic; color: var(--mid);
+      }
+
+      .composition-room {
+        display: grid; grid-template-columns: 1fr auto 1fr;
+        gap: 48px; align-items: center;
+        max-width: 980px; width: 100%;
+        margin-bottom: 80px;
+        animation: composeIn 1.0s ease both;
+      }
+      @keyframes composeIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+
+      .composition-figure { text-align: center; }
+      .composition-figure-a { text-align: right; }
+      .composition-figure-b { text-align: left; }
+      .composition-figure-btn {
+        background: none; border: none; padding: 0; cursor: pointer;
+        font-family: inherit; color: inherit; text-align: inherit;
+        display: block; width: 100%;
+        transition: opacity 0.2s;
+      }
+      .composition-figure-btn:hover .composition-swap { opacity: 1; }
+      .composition-meta {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase;
+        color: var(--trad); margin-bottom: 14px;
+      }
+      .composition-name {
+        font-family: 'Fraunces', serif;
+        font-variation-settings: "opsz" 144;
+        letter-spacing: -0.03em; line-height: 0.92;
+      }
+      .composition-first {
+        display: block; font-size: clamp(18px, 2vw, 24px); font-weight: 400;
+        font-style: italic; color: var(--mid); margin-bottom: 6px;
+        font-variation-settings: "opsz" 24;
+        letter-spacing: -0.005em;
+      }
+      .composition-last {
+        display: block; font-size: clamp(56px, 8vw, 96px); font-weight: 500;
+        color: var(--ink);
+      }
+      .composition-year {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 13px; color: var(--mid); margin-top: 14px;
+        letter-spacing: 0.05em;
+      }
+      .composition-confidence {
+        font-family: 'Fraunces', serif; font-style: italic;
+        font-size: 12px; color: var(--mid); margin-top: 8px;
+        font-variation-settings: "opsz" 14;
+        opacity: 0.75;
+      }
+      .composition-swap {
+        font-family: 'Fraunces', serif; font-style: italic;
+        font-size: 12px; color: var(--whisper); margin-top: 10px;
+        opacity: 0; transition: opacity 0.3s;
+      }
+
+      .composition-divider {
+        display: flex; flex-direction: column; align-items: center; gap: 14px;
+      }
+      .composition-divider-bar {
+        width: 60px; height: 2px;
+      }
+      .composition-amp {
+        font-family: 'Fraunces', serif; font-size: 22px;
+        color: var(--whisper); font-style: italic;
+      }
+
+      .composition-actions {
+        max-width: 560px; width: 100%; text-align: center;
+        opacity: 0; transform: translateY(8px);
+        transition: opacity 0.8s ease, transform 0.8s ease;
+      }
+      .composition-actions.is-ready {
+        opacity: 1; transform: translateY(0);
+      }
+      .composition-prompt {
+        font-family: 'Fraunces', serif; font-style: italic;
+        font-size: 22px; color: var(--ink-quiet); margin: 0 0 24px;
+        font-variation-settings: "opsz" 36;
+      }
+      .composition-input {
+        width: 100%; background: transparent; border: none;
+        border-bottom: 1px solid var(--rule);
+        padding: 14px 0;
+        font-family: 'Fraunces', serif; font-size: 22px;
+        color: var(--ink); text-align: center;
+        outline: none;
+        font-variation-settings: "opsz" 24;
+        transition: border-color 0.2s;
+      }
+      .composition-input::placeholder {
+        color: var(--whisper); font-style: italic;
+      }
+      .composition-input:focus { border-bottom-color: var(--ink); }
+
+      .composition-suggestions {
+        list-style: none; padding: 0; margin: 24px 0 40px;
+        display: flex; flex-wrap: wrap; gap: 16px 24px; justify-content: center;
+      }
+      .composition-suggestion {
+        background: none; border: none; padding: 0; cursor: pointer;
+        font-family: 'Fraunces', serif; font-style: italic;
+        font-size: 14px; color: var(--mid);
+        transition: color 0.2s;
+      }
+      .composition-suggestion:hover { color: var(--ink); }
+
+      .composition-begin {
+        background: var(--ink); color: var(--bg);
+        border: none; padding: 16px 36px;
+        font-family: 'Fraunces', serif; font-size: 16px; font-weight: 500;
+        letter-spacing: 0.02em;
+        cursor: pointer;
+        transition: all 0.2s;
+        font-variation-settings: "opsz" 18;
+      }
+      .composition-begin:hover { background: var(--ink-quiet); transform: translateY(-1px); }
+      .composition-arrow { display: inline-block; margin-left: 8px; transition: transform 0.2s; }
+      .composition-begin:hover .composition-arrow { transform: translateX(4px); }
+
+      /* ---- Exchange ---- */
+      .exchange {
+        min-height: calc(100vh - 70px);
+        max-width: 880px; margin: 0 auto;
+        padding: 48px 40px 96px;
+      }
+
+      .exchange-masthead {
+        display: grid; grid-template-columns: 1fr auto 1fr;
+        gap: 32px; align-items: end;
+        padding-bottom: 36px; margin-bottom: 24px;
+        border-bottom: 1px solid var(--rule);
+      }
+      .exchange-disclaimer {
+        font-family: 'Fraunces', serif; font-style: italic;
+        font-size: 12px; color: var(--mid); margin: 0 0 40px;
+        text-align: center; line-height: 1.5;
+        font-variation-settings: "opsz" 14;
+        opacity: 0.7;
+        max-width: 560px; margin-left: auto; margin-right: auto;
+      }
+      .participant {
+        transition: opacity 0.8s ease;
+      }
+      .participant.is-dim { opacity: 0.42; }
+      .participant-meta {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase;
+        color: var(--trad); margin-bottom: 8px;
+      }
+      .participant-name {
+        font-family: 'Fraunces', serif;
+        font-variation-settings: "opsz" 72;
+        letter-spacing: -0.025em; line-height: 0.95;
+      }
+      .participant-first {
+        display: block; font-size: 13px; font-weight: 400;
+        font-style: italic; color: var(--mid); margin-bottom: 4px;
+        font-variation-settings: "opsz" 14;
+      }
+      .participant-last {
+        display: block; font-size: clamp(32px, 4vw, 48px); font-weight: 500;
+        color: var(--ink);
+      }
+      .participant-year {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 11px; color: var(--mid); margin-top: 6px;
+        letter-spacing: 0.05em;
+      }
+
+      .exchange-topic {
+        text-align: center; padding: 0 16px;
+      }
+      .exchange-topic-label {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 9px; letter-spacing: 0.22em; text-transform: uppercase;
+        color: var(--mid); margin-bottom: 8px;
+      }
+      .exchange-topic-text {
+        font-family: 'Fraunces', serif; font-style: italic;
+        font-size: 17px; color: var(--ink-quiet); line-height: 1.3;
+        font-variation-settings: "opsz" 24;
+        max-width: 220px;
+      }
+      .exchange-topic-pending { color: var(--whisper); letter-spacing: 0.3em; }
+
+      .exchange-body { min-height: 200px; }
+      .exchange-loading {
+        padding: 60px 0; text-align: center;
+        font-family: 'Fraunces', serif; font-style: italic;
+        font-size: 18px; color: var(--mid);
+        font-variation-settings: "opsz" 24;
+        animation: loadFade 2s ease infinite;
+      }
+      .exchange-loading-inline { padding: 24px 0; font-size: 15px; }
+      @keyframes loadFade { 0%,100% { opacity: 0.5; } 50% { opacity: 1; } }
+
+      .exchange-error {
+        font-family: 'Fraunces', serif; font-style: italic;
+        font-size: 15px; color: #d6342b;
+      }
+
+      .turn {
+        margin-bottom: 32px;
+        animation: turnIn 0.7s ease both;
+      }
+      @keyframes turnIn {
+        from { opacity: 0; transform: translateY(8px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      .turn-a { padding-right: 8%; }
+      .turn-b { padding-left: 8%; text-align: left; }
+
+      .turn-header {
+        display: flex; align-items: baseline; gap: 14px;
+        margin-bottom: 10px; padding-bottom: 8px;
+        border-bottom: 1px solid var(--rule);
+      }
+      .turn-name {
+        font-family: 'Fraunces', serif; font-size: 22px; font-weight: 500;
+        color: var(--trad); letter-spacing: -0.01em;
+        font-variation-settings: "opsz" 24;
+      }
+      .turn-meta {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 10px; color: var(--mid); letter-spacing: 0.05em;
+      }
+      .turn-body {
+        font-family: 'Fraunces', serif; font-size: 18px; line-height: 1.55;
+        color: var(--ink); margin: 0;
+        font-variation-settings: "opsz" 18;
+      }
+
+      .host-turn {
+        margin: 24px 0; padding: 18px 24px;
+        background: var(--paper);
+        border-left: 3px solid var(--whisper);
+        animation: turnIn 0.7s ease both;
+      }
+      .host-turn-label {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 9px; letter-spacing: 0.2em; text-transform: uppercase;
+        color: var(--mid); margin-bottom: 8px;
+      }
+      .host-turn-body {
+        font-family: 'Fraunces', serif; font-style: italic;
+        font-size: 16px; color: var(--ink-quiet); margin: 0;
+        line-height: 1.5;
+        font-variation-settings: "opsz" 18;
+      }
+
+      /* ---- Exchange controls ---- */
+      .exchange-controls {
+        margin-top: 48px; padding-top: 32px;
+        border-top: 1px solid var(--rule);
+        animation: turnIn 0.6s ease 0.2s both;
+      }
+      .exchange-controls-row {
+        display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
+      }
+      .ctrl {
+        background: none; border: none; padding: 0; cursor: pointer;
+        font-family: 'Fraunces', serif; font-size: 15px;
+        color: var(--ink); transition: color 0.2s;
+        font-variation-settings: "opsz" 18;
+      }
+      .ctrl:hover { color: var(--ink-quiet); }
+      .ctrl-primary {
+        font-weight: 500;
+        text-decoration: underline; text-decoration-thickness: 2px;
+        text-underline-offset: 4px;
+      }
+      .ctrl-divider {
+        width: 1px; height: 14px; background: var(--rule);
+      }
+
+      .followup {
+        animation: turnIn 0.4s ease both;
+      }
+      .followup-label {
+        font-family: 'Fraunces', serif; font-style: italic;
+        font-size: 14px; color: var(--mid); margin-bottom: 12px;
+      }
+      .followup-input {
+        width: 100%; background: transparent; border: none;
+        border-bottom: 1px solid var(--ink); padding: 12px 0;
+        font-family: 'Fraunces', serif; font-size: 18px; color: var(--ink);
+        outline: none;
+        font-variation-settings: "opsz" 18;
+      }
+      .followup-input::placeholder { color: var(--whisper); font-style: italic; }
+      .followup-actions {
+        display: flex; align-items: center; gap: 20px; margin-top: 16px;
+      }
+      .followup-submit {
+        background: var(--ink); color: var(--bg); border: none;
+        padding: 10px 22px; cursor: pointer;
+        font-family: 'Fraunces', serif; font-size: 14px; font-weight: 500;
+        transition: all 0.2s;
+        font-variation-settings: "opsz" 18;
+      }
+      .followup-submit:disabled { opacity: 0.3; cursor: not-allowed; }
+      .followup-submit:not(:disabled):hover { background: var(--ink-quiet); }
+      .followup-submit span { margin-left: 6px; }
+
+      /* ---- Portraits ---- */
+      .map-hover-portrait {
+        width: 88px; height: 88px;
+        border-radius: 50%;
+        border: 3px solid;
+        object-fit: cover;
+        margin-bottom: 16px;
+        background: var(--bg);
+      }
+      .map-list-portrait {
+        width: 44px; height: 44px;
+        border-radius: 50%;
+        border: 2px solid;
+        object-fit: cover;
+        flex: 0 0 auto;
+        background: var(--bg);
+      }
+      .composition-portrait {
+        display: block;
+        width: 200px; height: 200px;
+        border-radius: 50%;
+        border: 4px solid;
+        object-fit: cover;
+        margin: 0 auto 24px;
+        background: var(--bg);
+        box-shadow: 0 4px 24px rgba(26,22,20,0.08);
+      }
+      .composition-figure-a .composition-portrait { margin-left: auto; margin-right: 0; }
+      .composition-figure-b .composition-portrait { margin-left: 0; margin-right: auto; }
+      .participant {
+        position: relative;
+      }
+      .participant-portrait {
+        width: 64px; height: 64px;
+        border-radius: 50%;
+        border: 2px solid;
+        object-fit: cover;
+        margin-bottom: 12px;
+        background: var(--bg);
+        display: block;
+      }
+      .part-left .participant-portrait { margin-left: 0; margin-right: auto; }
+      .part-right .participant-portrait { margin-left: auto; margin-right: 0; }
+      .turn-portrait {
+        width: 32px; height: 32px;
+        border-radius: 50%;
+        border: 2px solid;
+        object-fit: cover;
+        margin-right: 4px;
+        background: var(--bg);
+        flex: 0 0 auto;
+      }
+      .turn-header { display: flex; align-items: center; gap: 12px; }
+
+      @media (max-width: 720px) {
+        .composition-portrait { width: 140px; height: 140px; }
+        .map-list-portrait { width: 36px; height: 36px; }
+        .participant-portrait { width: 48px; height: 48px; }
+      }
+
+      /* ---- Report card ---- */
+      .report-card {
+        max-width: 760px; margin: 48px auto 0;
+        padding: 32px 36px;
+        background: #fbf8ef;
+        border: 1px solid var(--rule);
+        border-radius: 4px;
+        animation: cardFade 0.6s ease both;
+      }
+      @keyframes cardFade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+      .report-card-loading {
+        text-align: center;
+        padding: 48px 36px;
+      }
+      .report-card-head {
+        display: flex; align-items: baseline; justify-content: space-between;
+        margin-bottom: 28px;
+        padding-bottom: 14px;
+        border-bottom: 1px solid var(--rule);
+      }
+      .report-card-label, .report-block-label {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase;
+        color: var(--mid);
+      }
+      .report-card-delta {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 11px; letter-spacing: 0.05em;
+      }
+      .report-card-delta.is-up { color: #2f8f4d; }
+      .report-card-delta.is-down { color: #c0392b; }
+      .report-card-delta.is-flat { color: var(--mid); }
+
+      .report-card-body {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 36px;
+        margin-bottom: 32px;
+      }
+      @media (max-width: 720px) {
+        .report-card-body { grid-template-columns: 1fr; gap: 32px; }
+        .report-card { padding: 24px 20px; }
+      }
+
+      .report-block-label { margin-bottom: 14px; display: block; }
+
+      .report-room-score-row {
+        display: flex; align-items: center; gap: 12px;
+        margin-bottom: 12px;
+      }
+      .report-score-numeral {
+        font-family: 'Fraunces', serif;
+        font-size: 64px; font-weight: 400;
+        font-variation-settings: "opsz" 144;
+        letter-spacing: -0.04em; line-height: 0.9;
+        color: var(--ink);
+      }
+      .report-radar { flex: 1 1 auto; }
+      .report-block-note {
+        font-family: 'Fraunces', serif; font-style: italic;
+        font-size: 13px; line-height: 1.5;
+        color: var(--mid); margin: 0;
+      }
+
+      .fidelity-bar { margin-bottom: 20px; }
+      .fidelity-bar:last-child { margin-bottom: 0; }
+      .fidelity-bar-head {
+        display: flex; align-items: center; gap: 10px;
+        margin-bottom: 8px;
+      }
+      .fidelity-bar-portrait {
+        width: 32px; height: 32px;
+        border-radius: 50%; border: 2px solid;
+        object-fit: cover;
+        flex: 0 0 auto;
+      }
+      .fidelity-bar-meta { flex: 1 1 auto; min-width: 0; }
+      .fidelity-bar-name {
+        font-family: 'Plus Jakarta Sans', sans-serif;
+        font-size: 13px; font-weight: 600;
+        letter-spacing: 0.04em;
+        color: var(--ink);
+      }
+      .fidelity-bar-note {
+        font-family: 'Fraunces', serif; font-style: italic;
+        font-size: 11px; color: var(--mid);
+        margin-top: 2px;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
+      .fidelity-bar-score {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 14px; font-weight: 600;
+        color: var(--ink);
+        flex: 0 0 auto;
+      }
+      .fidelity-bar-track {
+        height: 4px;
+        background: rgba(26,22,20,0.06);
+        border-radius: 2px;
+        overflow: hidden;
+      }
+      .fidelity-bar-fill {
+        height: 100%;
+        transition: width 0.6s ease;
+      }
+
+      .report-move {
+        margin-bottom: 24px;
+        padding-top: 24px;
+        border-top: 1px solid var(--rule);
+      }
+      .report-move-quote {
+        font-family: 'Fraunces', serif;
+        font-size: 18px; line-height: 1.4;
+        font-style: italic;
+        color: var(--ink);
+        margin: 12px 0 8px;
+        padding-left: 16px;
+        border-left: 3px solid var(--ink);
+        font-variation-settings: "opsz" 30;
+      }
+      .report-move-credit {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 11px; letter-spacing: 0.05em;
+        color: var(--mid);
+      }
+      .report-move-credit em {
+        font-family: 'Fraunces', serif;
+        font-style: italic;
+        text-transform: none;
+        letter-spacing: 0;
+        font-size: 13px;
+        color: var(--mid);
+      }
+
+      .report-open {
+        padding-top: 24px;
+        border-top: 1px solid var(--rule);
+      }
+      .report-open-rows {
+        display: grid; gap: 10px;
+        margin-top: 12px;
+      }
+      .report-open-row {
+        display: grid;
+        grid-template-columns: 100px 1fr;
+        gap: 12px;
+        align-items: baseline;
+      }
+      @media (max-width: 720px) {
+        .report-open-row { grid-template-columns: 1fr; gap: 2px; }
+      }
+      .report-open-name {
+        font-family: 'Plus Jakarta Sans', sans-serif;
+        font-size: 11px; font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      .report-open-row em {
+        font-family: 'Fraunces', serif; font-style: italic;
+        font-size: 14px; line-height: 1.5;
+        color: var(--ink);
+      }
+    `}</style>
+  );
+}
+
+
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(<AnatomyOfAdvertising />);
+</script>
+</body>
+</html>
