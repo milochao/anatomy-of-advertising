@@ -43,7 +43,7 @@ const PORTRAIT_AVAILABLE = new Set([
   "macmanus","bernbach","mcluhan","heath","wood","freud","dichter",
   "packard","gossage","damasio","krugman","ehrenberg","sharp","romaniuk",
   "binetfield","nelsonfield","king","pollitt","cialdini","thaler","ariely",
-  "kahneman","sutherland","feldwick",
+  "kahneman","sutherland","feldwick","starch",
 ]);
 function hasPortrait(t) { return t && !t.kind && PORTRAIT_AVAILABLE.has(t.id); }
 
@@ -134,7 +134,7 @@ const THINKERS = [
     bio:"Motivation research applied Freud to consumer behaviour. The cake mix and add-an-egg story is largely apocryphal. Food chemistry drove the egg requirement." },
   { id:"packard", first:"Vance", last:"Packard", year:"1957", col:"y1957", tradition:"unconscious",
     bio:"The Hidden Persuaders, 1957. Public panic. Congressional hearings. The industry retreated from Dichter not because the work failed, but because the public found it monstrous." },
-  { id:"gossage", first:"Howard", last:"Gossage", year:"1960s", col:"y1964", tradition:"unconscious", offsetY:48,
+  { id:"gossage", first:"Howard", last:"Gossage", year:"1960s", col:"y1964", tradition:"unconscious", offsetY:62,
     bio:"Argued advertising should reward the reader, not interrupt them. The patron saint of permission, decades before the term." },
   { id:"damasio", first:"Antonio", last:"Damasio", year:"1994", col:"y1994", tradition:"unconscious", ghost:true,
     bio:"Descartes' Error, 1994. Elliot's meningioma case proved emotion is necessary for rational decision. Phineas Gage is folklore. Elliot is the clinical proof." },
@@ -147,7 +147,7 @@ const THINKERS = [
     bio:"Repeat Buying, 1972. ATR: Awareness, Trial, Reinforcement. Light buyers drive growth, not loyalists. Empirical, not theoretical." },
   { id:"sharp", first:"Byron", last:"Sharp", year:"2010", col:"y2010", tradition:"empirical", interchange:true,
     bio:"Argues against meaningful differentiation and for distinctiveness. CEPs trigger occasions. DBAs fire when those occasions arise. Mental availability over preference." },
-  { id:"romaniuk", first:"Jenni", last:"Romaniuk", year:"2012", col:"y2011", tradition:"empirical", offsetY:48,
+  { id:"romaniuk", first:"Jenni", last:"Romaniuk", year:"2012", col:"y2011", tradition:"empirical", offsetY:62,
     bio:"Ehrenberg-Bass Institute, 2012. Codified the visual and verbal signals the brand owns. Made Sharp's argument operational for the planner's toolkit." },
   { id:"binetfield", first:"Binet", last:"& Field", year:"2013", col:"y2013", tradition:"empirical", bridgeTo:"emotional",
     bio:"IPA Databank work, 2013. Long-term emotional building plus short-term activation. The 60/40 ratio is a diagnostic baseline, not a universal constant." },
@@ -164,7 +164,7 @@ const THINKERS = [
     bio:"Influence, 1984. Reciprocity, commitment, social proof, authority, liking, scarcity. Behavioural science as a practitioner toolkit." },
   { id:"thaler", first:"Richard", last:"Thaler", year:"2008", col:"y2008", tradition:"behavioural",
     bio:"Nudge, 2008. Default settings as policy lever. Choice architecture as discipline. The behavioural turn made institutional." },
-  { id:"ariely", first:"Dan", last:"Ariely", year:"2008", col:"y2008", tradition:"behavioural", offsetY:48,
+  { id:"ariely", first:"Dan", last:"Ariely", year:"2008", col:"y2008", tradition:"behavioural", offsetY:62,
     bio:"Predictably Irrational, 2008. Made behavioural economics a bestseller. The 2021 data fabrication should be named, not euphemised." },
   { id:"kahneman", first:"Daniel", last:"Kahneman", year:"2011", col:"y2011", tradition:"behavioural",
     bio:"Thinking, Fast and Slow, 2011. Popularised System 1 and System 2. Stanovich and West coined the labels in 2000. Kahneman gave them to the field." },
@@ -1131,7 +1131,7 @@ function MapScreen({ slotA, slotB, hoveredId, hoveredObj, onTap, onHover, onClea
             const hovered = s.id === hoveredId;
             const isKind = !!s.kind;
             const showPortrait = hasPortrait(s);
-            const portraitR = 18; // portrait radius in SVG units
+            const portraitR = 22; // portrait radius in SVG units
             const dotR = isKind ? 5 : (s.interchange ? 11 : 7);
             const r = showPortrait ? portraitR : dotR;
             const clipId = `portrait-clip-${s.id}`;
