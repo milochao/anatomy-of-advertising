@@ -1018,7 +1018,7 @@ function ArrivalScreen({ warmStarts, thinkerById, onWarmStart, onOpenMap }) {
                   )}
                 </div>
                 <div className="card-meta">
-                  <div className="card-name">{t.last}</div>
+                  <div className="card-name">{t.last.startsWith("&") ? `${t.first} ${t.last}` : t.last}</div>
                   <div className="card-year">{t.year}</div>
                 </div>
               </button>
