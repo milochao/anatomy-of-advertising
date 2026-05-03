@@ -1140,7 +1140,7 @@ function MapScreen({ slotA, slotB, hoveredId, hoveredObj, onTap, onHover, onClea
                 onMouseEnter={() => onHover(s.id)}
                 onMouseLeave={() => onHover(null)}
                 onClick={() => onTap(s.id)}>
-                <rect x={s.x-44} y={s.y-portraitR-4} width={88} height={portraitR*2+8} fill="transparent" />
+                <rect x={s.x-44} y={s.y-portraitR-4} width={88} height={portraitR*2+8} fill="transparent" pointerEvents="all" />
 
                 {showPortrait ? (
                   <>
@@ -1209,7 +1209,7 @@ function MapScreen({ slotA, slotB, hoveredId, hoveredObj, onTap, onHover, onClea
                   textAnchor="middle"
                   letterSpacing={isKind ? 0 : 0.8}
                   opacity={isKind ? 0.75 : (hovered ? 1 : 0.92)}>
-                  {isKind ? `${s.first} ${s.last}` : s.last.toUpperCase()}
+                  {isKind ? `${s.first} ${s.last}` : (s.last.startsWith('&') ? `${s.first} ${s.last}`.toUpperCase() : s.last.toUpperCase())}
                 </text>
                 <text x={s.x} y={s.y + r + 16} fill="#7a6f63"
                   fontFamily="JetBrains Mono, monospace"
