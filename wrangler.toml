@@ -1,1 +1,7 @@
+name = "anatomy-of-advertising"
+compatibility_date = "2026-05-02"
+pages_build_output_dir = "."
 
+[[kv_namespaces]]
+binding = "AOA_LIMITS"
+id = "PASTE_KV_NAMESPACE_ID_HERE"
