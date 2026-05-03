@@ -5,3 +5,7 @@ pages_build_output_dir = "."
 [[kv_namespaces]]
 binding = "AOA_LIMITS"
 id = "a7e14b608e9f4b15b752f376489ffcbe"
+
+[vars]
+DAILY_GLOBAL_CAP = "1000"
+DAILY_PER_IP_CAP = "100"
