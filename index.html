@@ -250,18 +250,44 @@ function AnatomyOfAdvertising() {
   }
   function goMap() { setPhase("map"); setError(null); }
 
+  function playClick() {
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      if (!window.__aoaCtx) window.__aoaCtx = new Ctx();
+      const ctx = window.__aoaCtx;
+      if (ctx.state === "suspended") ctx.resume();
+      // Short, soft click: noise burst into a quick decay envelope
+      const now = ctx.currentTime;
+      const buf = ctx.createBuffer(1, 256, ctx.sampleRate);
+      const data = buf.getChannelData(0);
+      for (let i = 0; i < data.length; i++) {
+        data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
+      }
+      const src = ctx.createBufferSource();
+      src.buffer = buf;
+      const filter = ctx.createBiquadFilter();
+      filter.type = "bandpass";
+      filter.frequency.value = 1800;
+      filter.Q.value = 0.8;
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.18, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+      src.connect(filter);
+      filter.connect(gain);
+      gain.connect(ctx.destination);
+      src.start(now);
+      src.stop(now + 0.06);
+    } catch (e) { /* silent */ }
+  }
+
   function tapStation(id) {
     const t = thinkerById[id];
-    if (!t || t.kind) return; // events, ads, instruments, patterns are not debaters
+    if (!t || t.kind) return;
     if (id === slotA) { setSlotA(null); return; }
     if (id === slotB) { setSlotB(null); return; }
-    if (!slotA) { setSlotA(id); return; }
-    if (!slotB) {
-      setSlotB(id);
-      // Both filled — go to composition
-      setTimeout(() => setPhase("composition"), 180);
-      return;
-    }
+    if (!slotA) { playClick(); setSlotA(id); return; }
+    if (!slotB) { playClick(); setSlotB(id); return; }
     setSlotA(slotB); setSlotB(id);
   }
 
@@ -950,6 +976,7 @@ Return JSON only. Schema: { "text": "your answer" }`;
             onHover={setHoveredId}
             onClear={() => { setSlotA(null); setSlotB(null); }}
             onLeave={goArrival}
+            onBegin={() => setPhase("composition")}
           />
         )}
         {phase === "composition" && (
@@ -1022,8 +1049,7 @@ function Shell({ phase, onLeave, onMap, children }) {
 // ============================================================
 function ArrivalScreen({ warmStarts, thinkerById, onWarmStart, onOpenMap }) {
   function walkIn() {
-    const ws = warmStarts[Math.floor(Math.random() * warmStarts.length)];
-    onWarmStart(ws.a, ws.b, ws.topic, ws.context);
+    onOpenMap();
   }
 
   const marqueeIds = THINKERS.filter(t => PORTRAIT_AVAILABLE.has(t.id)).map(t => t.id);
@@ -1078,10 +1104,6 @@ function ArrivalScreen({ warmStarts, thinkerById, onWarmStart, onOpenMap }) {
           <span className="arrival-walk-in-text">Walk in</span>
           <span className="arrival-walk-in-arrow">&rarr;</span>
         </button>
-
-        <button onClick={onOpenMap} className="arrival-quiet-link">
-          or pick your own pairing &rarr;
-        </button>
       </div>
 
       <div className="arrival-marquee" aria-hidden="true">
@@ -1108,7 +1130,7 @@ function ArrivalScreen({ warmStarts, thinkerById, onWarmStart, onOpenMap }) {
 // ============================================================
 // MAP — subway map, secondary entry point
 // ============================================================
-function MapScreen({ slotA, slotB, hoveredId, hoveredObj, onTap, onHover, onClear, onLeave }) {
+function MapScreen({ slotA, slotB, hoveredId, hoveredObj, onTap, onHover, onClear, onLeave, onBegin }) {
   const stations = THINKERS.map(t => ({
     ...t, x: COL_X[t.col], y: ROW_Y[t.tradition] + (t.offsetY || 0),
   }));
@@ -1117,12 +1139,23 @@ function MapScreen({ slotA, slotB, hoveredId, hoveredObj, onTap, onHover, onClea
     <section className="map-screen">
       <div className="map-prelude">
         <p className="map-prelude-text">
-          Pick two figures from any tradition. The room composes when the second is chosen.
+          {!slotA && !slotB && "Pick two figures."}
+          {slotA && !slotB && "Pick one more."}
+          {slotA && slotB && "Two seated. Begin when ready."}
         </p>
         {(slotA || slotB) && (
           <button onClick={onClear} className="aoa-link aoa-link-quiet">Clear selection</button>
         )}
       </div>
+
+      {slotA && slotB && (
+        <div className="map-begin-bar">
+          <button onClick={onBegin} className="map-begin-btn">
+            <span>Begin</span>
+            <span className="map-begin-arrow">&rarr;</span>
+          </button>
+        </div>
+      )}
 
       <MobileMapList slotA={slotA} slotB={slotB} onTap={onTap} />
 
@@ -2347,6 +2380,49 @@ function GlobalStyle() {
         font-family: 'Fraunces', serif; font-style: italic;
         font-size: 16px; color: var(--mid); margin: 0;
         font-variation-settings: "opsz" 24;
+      }
+
+      .map-begin-bar {
+        position: fixed;
+        bottom: 0; left: 0; right: 0;
+        z-index: 40;
+        padding: 24px 40px 32px;
+        background: linear-gradient(to top, var(--bg) 60%, rgba(244,239,228,0));
+        display: flex;
+        justify-content: center;
+        animation: beginRise 0.5s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+      }
+      @keyframes beginRise {
+        from { opacity: 0; transform: translateY(24px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      .map-begin-btn {
+        background: var(--ink);
+        color: var(--paper);
+        border: none;
+        padding: 20px 44px;
+        font-family: 'Fraunces', serif;
+        font-size: 22px;
+        font-variation-settings: "opsz" 28;
+        letter-spacing: -0.01em;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 14px;
+        transition: gap 0.3s ease, background 0.3s ease, transform 0.2s ease;
+        box-shadow: 0 8px 32px rgba(26,22,20,0.18);
+      }
+      .map-begin-btn:hover {
+        gap: 22px;
+        background: #2d251f;
+        transform: translateY(-1px);
+      }
+      .map-begin-arrow {
+        font-size: 22px;
+        transition: transform 0.3s ease;
+      }
+      .map-begin-btn:hover .map-begin-arrow {
+        transform: translateX(4px);
       }
       .map-scroll {
         overflow-x: auto; padding-bottom: 24px;
