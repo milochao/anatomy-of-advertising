@@ -16,7 +16,7 @@ export async function onRequestPost({ request, env }) {
   // ---- 1. Read configuration ----
   const apiKey = env.ANTHROPIC_API_KEY;
   if (!apiKey) {
-    return json({ error: "Server is missing its API key. Tell the host.", keys: Object.keys(env), hasKey: !!env.ANTHROPIC_API_KEY, keyLength: (env.ANTHROPIC_API_KEY || "").length }, 500);
+    return json({ error: "Server is missing its API key. Tell the host." }, 500);
   }
   const dailyGlobalCap = parseInt(env.DAILY_GLOBAL_CAP || "300", 10);
   const dailyPerIpCap = parseInt(env.DAILY_PER_IP_CAP || "20", 10);
