@@ -1021,56 +1021,53 @@ function Shell({ phase, onLeave, onMap, children }) {
 // ARRIVAL — quiet, single question, two warm starts, map link
 // ============================================================
 function ArrivalScreen({ warmStarts, thinkerById, onWarmStart, onOpenMap }) {
+  // Pick a random pair from WARM_STARTS for "Walk in"
+  function walkIn() {
+    const ws = warmStarts[Math.floor(Math.random() * warmStarts.length)];
+    onWarmStart(ws.a, ws.b, ws.topic, ws.context);
+  }
+
+  // Marquee: all portraits in display order, doubled so the loop reads continuous
+  const marqueeIds = THINKERS.filter(t => PORTRAIT_AVAILABLE.has(t.id)).map(t => t.id);
+  const marqueeDoubled = [...marqueeIds, ...marqueeIds];
+
   return (
-    <section className="arrival">
+    <section className="arrival arrival-salon">
+      <div className="arrival-bg" aria-hidden="true" />
       <div className="arrival-inner">
+        <div className="arrival-eyebrow">A salon, not a syllabus.</div>
         <h1 className="arrival-question">
-          The arguments that built advertising.
+          Pull up a chair.
         </h1>
         <p className="arrival-sub">
-          Two minds. One question. A live debate, every time.
+          Thirty-two arguers. Some agree. Most don't. All of them are talking.
         </p>
 
-        <div className="arrival-section-label">Three to start with</div>
-
-        <ul className="arrival-pairs">
-          {warmStarts.map((ws, i) => {
-            const a = thinkerById[ws.a];
-            const b = thinkerById[ws.b];
-            if (!a || !b) return null;
-            return (
-              <li key={i} className="arrival-pair" style={{ animationDelay: `${0.4 + i*0.12}s` }}>
-                <button onClick={() => onWarmStart(ws.a, ws.b, ws.topic, ws.context)} className="arrival-pair-btn">
-                  <div className="arrival-pair-question">{ws.question}</div>
-                  <div className="arrival-pair-credit">
-                    <span style={{ color: TRADITIONS[a.tradition].color }}>{a.last}</span>
-                    <span className="arrival-pair-year"> ({a.year})</span>
-                    <span className="arrival-pair-amp"> &middot; </span>
-                    <span style={{ color: TRADITIONS[b.tradition].color }}>{b.last}</span>
-                    <span className="arrival-pair-year"> ({b.year})</span>
-                    {ws.subtitle && <em className="arrival-pair-subtitle"> &mdash; {ws.subtitle}</em>}
-                  </div>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-
-        <button onClick={onOpenMap} className="arrival-map-cta">
-          <div className="arrival-map-cta-line">Or build your own pairing</div>
-          <div className="arrival-map-cta-sub">
-            36 figures &middot; 8 traditions &middot; from Aristotle to today
-            <span className="arrival-arrow"> &rarr;</span>
-          </div>
+        <button onClick={walkIn} className="arrival-walk-in">
+          <span className="arrival-walk-in-text">Walk in</span>
+          <span className="arrival-walk-in-arrow">&rarr;</span>
         </button>
 
-        <div className="arrival-about">
-          <p>
-            Every theory in advertising was a fight. This is a reading room
-            for those fights &mdash; pick a question and watch two figures from the
-            field's history take it up. Push back. Ask a follow-up. Take the
-            transcript with you.
-          </p>
+        <button onClick={onOpenMap} className="arrival-quiet-link">
+          or pick your own two &rarr;
+        </button>
+      </div>
+
+      <div className="arrival-marquee" aria-hidden="true">
+        <div className="arrival-marquee-track">
+          {marqueeDoubled.map((id, i) => {
+            const t = thinkerById[id];
+            if (!t) return null;
+            const tradColor = TRADITIONS[t.tradition].color;
+            return (
+              <div key={`${id}-${i}`} className="arrival-marquee-item">
+                <div className="arrival-marquee-portrait" style={{ borderColor: tradColor }}>
+                  <img src={portraitURL(id)} alt="" />
+                </div>
+                <div className="arrival-marquee-name">{t.last}</div>
+              </div>
+            );
+          })}
         </div>
       </div>
     </section>
@@ -1937,125 +1934,192 @@ function GlobalStyle() {
         min-height: calc(100vh - 70px);
         display: flex; align-items: center; justify-content: center;
         padding: 80px 40px;
+        position: relative;
+        overflow: hidden;
       }
+
+      .arrival-salon .arrival-bg {
+        position: absolute;
+        top: 0; right: -8%; bottom: 0;
+        width: 56%;
+        background-image: url("./assets/algonquin.svg");
+        background-repeat: no-repeat;
+        background-position: center right;
+        background-size: contain;
+        opacity: 0.16;
+        pointer-events: none;
+        z-index: 0;
+        animation: bgFade 2.4s ease 0.2s both;
+      }
+      .arrival-salon::before {
+        content: "";
+        position: absolute;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: linear-gradient(
+          to right,
+          var(--paper) 0%,
+          var(--paper) 35%,
+          rgba(244, 239, 228, 0.85) 55%,
+          rgba(244, 239, 228, 0.4) 80%,
+          rgba(244, 239, 228, 0) 100%
+        );
+        pointer-events: none;
+        z-index: 1;
+      }
+      @keyframes bgFade {
+        from { opacity: 0; }
+        to { opacity: 0.16; }
+      }
+
       .arrival-inner {
         max-width: 720px; width: 100%;
+        position: relative;
+        z-index: 2;
+        margin-right: auto;
+        margin-left: 4%;
         animation: arrivalFade 1.2s ease 0.1s both;
+        padding-bottom: 180px;
       }
       @keyframes arrivalFade { from { opacity: 0; } to { opacity: 1; } }
+      @keyframes pairFade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+      .arrival-eyebrow {
+        font-family: 'Fraunces', serif; font-style: italic;
+        font-size: 15px; color: var(--mid);
+        font-variation-settings: "opsz" 18;
+        margin-bottom: 22px;
+        opacity: 0;
+        animation: pairFade 0.9s ease 0.4s both;
+      }
 
       .arrival-question {
         font-family: 'Fraunces', serif;
-        font-size: clamp(40px, 5.6vw, 72px);
+        font-size: clamp(56px, 8vw, 112px);
         font-weight: 400;
         font-variation-settings: "opsz" 144;
-        letter-spacing: -0.025em;
-        line-height: 1.02; color: var(--ink); margin: 0 0 16px;
+        letter-spacing: -0.03em;
+        line-height: 0.96; color: var(--ink); margin: 0 0 20px;
         max-width: 14ch;
       }
       .arrival-sub {
         font-family: 'Fraunces', serif; font-style: italic;
-        font-size: 18px; color: var(--mid); margin: 0 0 56px;
+        font-size: clamp(18px, 1.6vw, 22px);
+        color: var(--mid); margin: 0 0 56px;
         font-variation-settings: "opsz" 24;
-      }
-
-      .arrival-pairs { list-style: none; padding: 0; margin: 0; }
-      .arrival-pair:last-child { border-bottom: none; }
-      .arrival-pair {
-        border-top: 1px solid var(--rule);
+        max-width: 32ch;
+        line-height: 1.4;
         opacity: 0;
-        animation: pairFade 0.9s ease both;
+        animation: pairFade 0.9s ease 0.6s both;
       }
-      @keyframes pairFade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 
-      .arrival-pair-btn {
-        background: none; border: none; padding: 28px 4px;
-        width: 100%; text-align: left; cursor: pointer;
-        display: block; font-family: inherit; color: inherit;
-        transition: padding-left 0.3s ease;
-      }
-      .arrival-pair-btn:hover { padding-left: 16px; }
-      .arrival-pair-question {
+      .arrival-walk-in {
+        background: var(--ink);
+        color: var(--paper);
+        border: none;
+        padding: 22px 36px;
         font-family: 'Fraunces', serif;
-        font-size: clamp(28px, 3.4vw, 40px);
-        font-weight: 500;
-        font-variation-settings: "opsz" 56;
-        letter-spacing: -0.02em; line-height: 1.04;
-        color: var(--ink);
-        margin-bottom: 10px;
+        font-size: 22px;
+        font-variation-settings: "opsz" 28;
+        letter-spacing: -0.01em;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 14px;
+        transition: gap 0.3s ease, background 0.3s ease;
+        opacity: 0;
+        animation: pairFade 0.9s ease 0.85s both;
       }
-      .arrival-pair-credit {
+      .arrival-walk-in:hover {
+        gap: 22px;
+        background: #2d251f;
+      }
+      .arrival-walk-in-arrow {
+        font-size: 22px;
+        transition: transform 0.3s ease;
+      }
+      .arrival-walk-in:hover .arrival-walk-in-arrow {
+        transform: translateX(4px);
+      }
+
+      .arrival-quiet-link {
+        display: block;
+        background: none; border: none;
+        margin-top: 22px;
+        padding: 6px 0;
         font-family: 'Fraunces', serif;
-        font-size: 16px;
-        font-variation-settings: "opsz" 18;
-        line-height: 1.55;
-      }
-      .arrival-pair-credit > span:not(.arrival-pair-amp):not(.arrival-pair-year) {
-        font-weight: 500;
-      }
-      .arrival-pair-amp { color: var(--whisper); font-weight: 300; }
-      .arrival-pair-year {
-        color: var(--mid); font-size: 13px;
-        font-family: 'JetBrains Mono', monospace;
-        letter-spacing: 0.02em;
-      }
-      .arrival-pair-subtitle {
-        color: var(--mid); font-style: italic;
+        font-style: italic;
         font-size: 15px;
+        color: var(--mid);
+        cursor: pointer;
         font-variation-settings: "opsz" 18;
+        opacity: 0;
+        animation: pairFade 0.9s ease 1.0s both;
+        transition: color 0.2s;
       }
+      .arrival-quiet-link:hover { color: var(--ink); }
 
-      .arrival-section-label {
+      /* Marquee */
+      .arrival-marquee {
+        position: absolute;
+        bottom: 32px;
+        left: 0; right: 0;
+        z-index: 3;
+        overflow: hidden;
+        mask-image: linear-gradient(to right, transparent 0%, black 6%, black 94%, transparent 100%);
+        -webkit-mask-image: linear-gradient(to right, transparent 0%, black 6%, black 94%, transparent 100%);
+        opacity: 0;
+        animation: pairFade 1.2s ease 1.4s both;
+      }
+      .arrival-marquee-track {
+        display: flex;
+        gap: 32px;
+        width: max-content;
+        animation: marqueeScroll 90s linear infinite;
+      }
+      @keyframes marqueeScroll {
+        from { transform: translateX(0); }
+        to { transform: translateX(-50%); }
+      }
+      .arrival-marquee:hover .arrival-marquee-track {
+        animation-play-state: paused;
+      }
+      .arrival-marquee-item {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+        flex-shrink: 0;
+      }
+      .arrival-marquee-portrait {
+        width: 64px; height: 64px;
+        border-radius: 50%;
+        border: 2px solid;
+        background: var(--paper);
+        overflow: hidden;
+        display: flex; align-items: center; justify-content: center;
+      }
+      .arrival-marquee-portrait img {
+        width: 100%; height: 100%;
+        object-fit: cover;
+        display: block;
+      }
+      .arrival-marquee-name {
         font-family: 'JetBrains Mono', monospace;
-        font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase;
+        font-size: 9px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
         color: var(--mid);
-        padding-bottom: 14px;
-        margin-bottom: 0;
-        border-bottom: 1px solid var(--rule);
-        opacity: 0; animation: pairFade 0.9s ease 0.3s both;
       }
 
-      .arrival-map-cta {
-        display: block; width: 100%;
-        background: none; border: none; padding: 32px 4px;
-        cursor: pointer; text-align: left;
-        font-family: inherit; color: inherit;
-        border-bottom: 1px solid var(--rule);
-        opacity: 0; animation: pairFade 0.9s ease 0.85s both;
-        transition: padding-left 0.3s ease;
-      }
-      .arrival-map-cta:hover { padding-left: 16px; }
-      .arrival-map-cta-line {
-        font-family: 'Fraunces', serif;
-        font-size: clamp(22px, 2.6vw, 30px);
-        font-weight: 400; font-style: italic;
-        font-variation-settings: "opsz" 36;
-        letter-spacing: -0.015em; line-height: 1.1;
-        color: var(--ink-quiet);
-        margin-bottom: 8px;
-      }
-      .arrival-map-cta-sub {
-        font-family: 'Fraunces', serif;
-        font-size: 14px; color: var(--mid);
-        font-variation-settings: "opsz" 14;
-      }
-      .arrival-map-cta:hover .arrival-map-cta-line { color: var(--ink); }
-      .arrival-map-cta:hover .arrival-arrow { transform: translateX(4px); }
-      .arrival-arrow { display: inline-block; margin-left: 6px; transition: transform 0.2s; }
-
-      .arrival-map-link, .arrival-starter { display: none; }
-
-      .arrival-about {
-        margin-top: 64px;
-        max-width: 480px;
-        opacity: 0; animation: pairFade 0.9s ease 1.05s both;
-      }
-      .arrival-about p {
-        font-family: 'Fraunces', serif; font-style: italic;
-        font-size: 14px; line-height: 1.65;
-        color: var(--mid);
-        font-variation-settings: "opsz" 14;
-        margin: 0;
+      @media (max-width: 720px) {
+        .arrival-salon .arrival-bg {
+          width: 90%; right: -20%;
+          opacity: 0.10;
+        }
+        .arrival-inner { margin-left: 0; padding-bottom: 160px; }
+        .arrival-question { font-size: clamp(44px, 12vw, 64px); }
+        .arrival-marquee-portrait { width: 52px; height: 52px; }
+        .arrival-marquee-track { gap: 22px; }
       }
 
       /* ---- Mobile map list ---- */
@@ -2115,9 +2179,6 @@ function GlobalStyle() {
         .map-list { display: block; }
         .aoa-header { padding: 18px 24px; }
         .aoa-wordmark { font-size: 14px; }
-        .arrival-pair-names { font-size: 22px; }
-        .arrival-pair-topic { font-size: 14px; }
-        .arrival-pair-btn { flex-direction: column; align-items: flex-start; gap: 4px; padding: 22px 4px; }
         .composition-room { grid-template-columns: 1fr; gap: 32px; }
         .composition-figure-a, .composition-figure-b { text-align: center; }
         .composition-divider { transform: rotate(90deg); }
