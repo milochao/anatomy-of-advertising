@@ -949,6 +949,7 @@ Return JSON only. Schema: { "text": "your answer" }`;
             onExport={exportToMarkdown}
             exportFeedback={exportFeedback}
             roomCard={roomCard}
+            roomCardError={roomCardError}
             scoringInFlight={scoringInFlight}
             onPushHarder={pushHarder}
             onNewQuestion={newQuestionSamePair}
@@ -1332,7 +1333,7 @@ function ExchangeScreen({
   slotAObj, slotBObj, exchange, visibleTurns, loadingText, error,
   followUpFor, followUpText, setFollowUpFor, setFollowUpText, onSubmitFollowUp,
   onContinue, onPushBack, onChangeRoom, onLeave, onExport, exportFeedback,
-  roomCard, scoringInFlight, onPushHarder, onNewQuestion, roundCount, priorRoomScore,
+  roomCard, roomCardError, scoringInFlight, onPushHarder, onNewQuestion, roundCount, priorRoomScore,
 }) {
   const tradA = slotAObj ? TRADITIONS[slotAObj.tradition] : null;
   const tradB = slotBObj ? TRADITIONS[slotBObj.tradition] : null;
