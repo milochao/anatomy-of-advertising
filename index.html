@@ -205,6 +205,7 @@ function AnatomyOfAdvertising() {
   const [starterContext, setStarterContext] = useState(null);
   const [exportFeedback, setExportFeedback] = useState(null);
   const [roomCard, setRoomCard] = useState(null);
+  const [roomCardError, setRoomCardError] = useState(null);
   const [scoringInFlight, setScoringInFlight] = useState(false);
   const [roundCount, setRoundCount] = useState(1);
   const [priorRoomScore, setPriorRoomScore] = useState(null);
@@ -221,7 +222,7 @@ function AnatomyOfAdvertising() {
     setTopic(""); setExchange(null); setVisibleTurns(0);
     setLoadingText(null); setError(null); setFollowUpFor(null); setFollowUpText("");
     setStarterContext(null); setExportFeedback(null);
-    setRoomCard(null); setRoundCount(1); setPriorRoomScore(null);
+    setRoomCard(null); setRoomCardError(null); setRoundCount(1); setPriorRoomScore(null);
   }
   function goMap() { setPhase("map"); setError(null); }
 
@@ -354,7 +355,13 @@ function AnatomyOfAdvertising() {
     }
     const data = await res.json();
     const text = data.content.filter(b=>b.type==="text").map(b=>b.text).join("");
-    const clean = text.replace(/```json/g,"").replace(/```/g,"").trim();
+    let clean = text.replace(/```json/g,"").replace(/```/g,"").trim();
+    // If there is leading/trailing text around the JSON, extract the outermost {...} block.
+    const firstBrace = clean.indexOf("{");
+    const lastBrace = clean.lastIndexOf("}");
+    if (firstBrace >= 0 && lastBrace > firstBrace) {
+      clean = clean.slice(firstBrace, lastBrace + 1);
+    }
     return JSON.parse(clean);
   }
 
@@ -506,7 +513,7 @@ Return JSON only. No preamble. No fences. Schema:
   "voiceNoteB": "one short note on B's reconstruction",
   "moveOfRound": {
     "turnIndex": number,
-    "speaker": "A" | "B",
+    "speaker": "A or B (one letter)",
     "quote": "phrase from that turn, under 12 words",
     "reason": "one sentence on why it landed"
   },
@@ -521,11 +528,13 @@ Return JSON only. No preamble. No fences. Schema:
   async function scoreCurrentExchange(turnsArg, aObj, bObj, topic) {
     if (!turnsArg || turnsArg.length < 4) return;
     setScoringInFlight(true);
+    setRoomCardError(null);
     try {
       const card = await evaluateExchange(turnsArg, aObj, bObj, topic);
       setRoomCard(card);
     } catch (e) {
       console.error("Scoring failed:", e);
+      setRoomCardError(e.userMessage || e.message || "Scoring the exchange failed. The turns are above. Try Continue or Push back.");
     } finally {
       setScoringInFlight(false);
     }
@@ -534,7 +543,7 @@ Return JSON only. No preamble. No fences. Schema:
   async function runExchange(topicArg) {
     if (!slotAObj || !slotBObj) return;
     setError(null); setExchange(null); setVisibleTurns(0);
-    setRoomCard(null); setPriorRoomScore(null); setRoundCount(1);
+    setRoomCard(null); setRoomCardError(null); setPriorRoomScore(null); setRoundCount(1);
     const usedTopic = (topicArg || "").trim();
 
     setLoadingText(`${slotAObj.last} and ${slotBObj.last} are taking their seats.`);
@@ -624,7 +633,7 @@ Return JSON only. Schema: { "topic": "the topic" }`, 200);
       },
     };
     setExchange(newInitial);
-    setRoomCard(null);
+    setRoomCard(null); setRoomCardError(null);
 
     const turns = [];
     const speakers = ["A", "B", "A", "B", "A", "B"];
@@ -696,7 +705,7 @@ Return JSON only. Schema: { "text": "your turn" }`;
   }
 
   function newQuestionSamePair() {
-    setExchange(null); setVisibleTurns(0); setRoomCard(null);
+    setExchange(null); setVisibleTurns(0); setRoomCard(null); setRoomCardError(null);
     setRoundCount(1); setPriorRoomScore(null);
     setTopic(""); setStarterContext(null);
     setPhase("composition");
@@ -741,7 +750,7 @@ Return JSON only. Schema: { "text": "your turn" }`;
         setVisibleTurns(working.length);
       }
       setLoadingText(null);
-      setRoomCard(null);
+      setRoomCard(null); setRoomCardError(null);
       scoreCurrentExchange(working, slotAObj, slotBObj, exchange.topic);
     } catch (e) {
       console.error(e);
@@ -809,7 +818,7 @@ Return JSON only. Schema: { "text": "your push-back" }`;
       setExchange({ ...exchange, turns: working });
       setVisibleTurns(working.length);
       setLoadingText(null);
-      setRoomCard(null);
+      setRoomCard(null); setRoomCardError(null);
       scoreCurrentExchange(working, slotAObj, slotBObj, exchange.topic);
     } catch (e) {
       console.error(e);
@@ -878,7 +887,7 @@ Return JSON only. Schema: { "text": "your answer" }`;
       setExchange({ ...exchange, turns: working });
       setVisibleTurns(working.length);
       setLoadingText(null);
-      setRoomCard(null);
+      setRoomCard(null); setRoomCardError(null);
       scoreCurrentExchange(working, slotAObj, slotBObj, exchange.topic);
     } catch (e) {
       console.error(e);
@@ -985,51 +994,22 @@ function ArrivalScreen({ warmStarts, thinkerById, onWarmStart, onOpenMap }) {
   return (
     <section className="arrival">
       <div className="arrival-hero">
-        <div className="pre-headline">
-          <span className="live-dot"></span>
-          <span>The room is open</span>
-        </div>
-
         <h1 className="big-headline">
-          <span className="bh-word">Pick</span>{" "}
-          <span className="bh-word">a</span>{" "}
-          <span className="bh-word bh-fight">fight</span>.
+          Pick a <span className="bh-fight">fight</span>.
         </h1>
-
         <p className="big-deck">
-          Thirty-two figures who built advertising theory. <strong>Pick two.</strong> Set the topic. They go six rounds. A referee stops them talking past each other.
+          Pick two of the figures below. Set the topic. Six rounds.
         </p>
-
-        <div className="mechanics">
-          <div className="chip"><span className="num">1</span>Pick two</div>
-          <div className="chip"><span className="num">2</span>Set the topic</div>
-          <div className="chip"><span className="num">3</span>Six rounds</div>
-          <div className="chip"><span className="num">4</span>Take the transcript</div>
-        </div>
-
-        <div className="scrawl scrawl-1">
-          <span className="scr-arrow">↘</span>start here
-        </div>
       </div>
 
       <div className="cast-section">
-        <div className="cast-header">
-          <span className="cast-label">→ The roster · 32 figures</span>
-          <span className="cast-sub">Click any to inspect · pick two on the next screen</span>
-        </div>
-
         <div className="cast-grid">
           {cast.map((t, i) => {
             const trad = TRADITIONS[t.tradition];
             const portrait = hasPortrait(t);
-            const conf = getConfidence(t);
-            const showBadge = (i % 7 === 0) || conf === "high";
             return (
               <button key={t.id} className="card" onClick={onOpenMap}
                 style={{ ['--trad']: trad.color }}>
-                {showBadge && conf === "high" && (
-                  <div className="card-badge">★</div>
-                )}
                 <div className="card-photo" style={{ borderBottomColor: trad.color }}>
                   {portrait ? (
                     <img src={portraitURL(t.id)} alt="" />
@@ -1045,10 +1025,6 @@ function ArrivalScreen({ warmStarts, thinkerById, onWarmStart, onOpenMap }) {
             );
           })}
         </div>
-
-        <div className="scrawl scrawl-2">
-          <span className="scr-arrow">↗</span>or just hit walk in
-        </div>
       </div>
 
       <div className="arrival-cta">
@@ -1056,9 +1032,6 @@ function ArrivalScreen({ warmStarts, thinkerById, onWarmStart, onOpenMap }) {
           Walk in
           <span className="walk-arrow">→</span>
         </button>
-        <div className="cta-aside">
-          <span>Free</span><span className="sep">/</span><span>No login</span><span className="sep">/</span><span>Six rounds per session</span>
-        </div>
       </div>
     </section>
   );
@@ -1096,6 +1069,11 @@ function MapScreen({ slotA, slotB, hoveredId, hoveredObj, onTap, onHover, onClea
       )}
 
       <MobileMapList slotA={slotA} slotB={slotB} onTap={onTap} />
+
+      <div className="map-scroll-hint">
+        <span className="scroll-hint-arrow">→</span>
+        <span>Scroll right to see all 32</span>
+      </div>
 
       <div className="map-scroll map-svg-wrapper">
         <svg viewBox={`0 0 ${VIEWBOX_W} ${VIEWBOX_H}`} className="map-svg">
@@ -1430,6 +1408,7 @@ function ExchangeScreen({
         <ReportCard
           card={roomCard}
           loading={scoringInFlight}
+          error={roomCardError}
           slotAObj={slotAObj}
           slotBObj={slotBObj}
           tradA={tradA}
@@ -1616,11 +1595,19 @@ function Turn({ turn, speaker, trad }) {
 // ============================================================
 // REPORT CARD — UNCHANGED. Editorial register preserved.
 // ============================================================
-function ReportCard({ card, loading, slotAObj, slotBObj, tradA, tradB, roundCount, priorRoomScore, turns }) {
+function ReportCard({ card, loading, error, slotAObj, slotBObj, tradA, tradB, roundCount, priorRoomScore, turns }) {
   if (loading) {
     return (
       <div className="report-card report-card-loading">
         <div className="report-card-label">Scoring the exchange…</div>
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div className="report-card report-card-error">
+        <div className="report-card-label">Scoring failed</div>
+        <p className="report-card-error-msg">{error}</p>
       </div>
     );
   }
@@ -1926,37 +1913,20 @@ function GlobalStyle() {
         padding: 0;
       }
       .arrival-hero {
-        padding: 60px 36px 24px;
+        padding: 80px 36px 48px;
         text-align: center;
         position: relative;
         animation: fadeIn 0.8s ease both;
       }
-      .pre-headline {
-        font-family: 'Geist Mono', monospace;
-        font-size: 12px; font-weight: 500;
-        letter-spacing: 0.18em; text-transform: uppercase;
-        color: var(--ink-quiet);
-        margin-bottom: 28px;
-        display: inline-flex; align-items: center; gap: 12px;
-      }
 
       .big-headline {
         font-family: 'Instrument Serif', serif;
-        font-size: clamp(76px, 14vw, 200px);
+        font-size: clamp(56px, 9vw, 128px);
         font-weight: 400;
-        line-height: 0.88;
-        letter-spacing: -0.04em;
+        line-height: 0.95;
+        letter-spacing: -0.035em;
         margin: 0 auto;
-        display: inline-block;
-        position: relative;
-      }
-      .bh-word {
-        display: inline-block;
-        transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
-      }
-      .big-headline:hover .bh-word:nth-child(1) { transform: rotate(-2deg) translateY(-4px); }
-      .big-headline:hover .bh-fight {
-        transform: rotate(3deg) translateY(-2px);
+        color: var(--ink);
       }
       .bh-fight {
         font-style: italic;
@@ -1966,10 +1936,10 @@ function GlobalStyle() {
       .bh-fight::after {
         content: "";
         position: absolute;
-        bottom: 0.05em;
+        bottom: 0.06em;
         left: -0.02em;
         right: -0.02em;
-        height: 0.2em;
+        height: 0.18em;
         background: var(--accent-yellow);
         z-index: -1;
         transform: skew(-8deg);
@@ -1977,14 +1947,14 @@ function GlobalStyle() {
 
       .big-deck {
         font-family: 'Geist', sans-serif;
-        font-size: clamp(15px, 1.6vw, 18px);
+        font-size: clamp(15px, 1.5vw, 17px);
         font-weight: 400;
         line-height: 1.5;
         color: var(--ink-quiet);
-        max-width: 52ch;
-        margin: 36px auto 0;
+        max-width: 48ch;
+        margin: 24px auto 0;
+        letter-spacing: -0.005em;
       }
-      .big-deck strong { color: var(--ink); font-weight: 600; }
 
       .mechanics {
         display: flex; justify-content: center; flex-wrap: wrap;
@@ -2082,18 +2052,12 @@ function GlobalStyle() {
       .card:nth-child(odd):hover { transform: translate(-2px, -3px) rotate(1deg); }
       .card-photo {
         height: 70%;
-        background: linear-gradient(160deg, #C9A878 0%, #6B5640 100%);
+        background: var(--bg-warm);
         border-bottom: 1.5px solid var(--ink);
         display: flex; align-items: center; justify-content: center;
         position: relative;
         overflow: hidden;
       }
-      .card:nth-child(2n) .card-photo { background: linear-gradient(160deg, #B89878 0%, #4A3D2E 100%); }
-      .card:nth-child(3n) .card-photo { background: linear-gradient(160deg, #D4B898 0%, #7A6248 100%); }
-      .card:nth-child(4n) .card-photo { background: linear-gradient(160deg, #A89478 0%, #5C4A38 100%); }
-      .card:nth-child(5n) .card-photo { background: linear-gradient(160deg, #C2A888 0%, #6B5440 100%); }
-      .card:nth-child(7n) .card-photo { background: linear-gradient(160deg, #E0C8A4 0%, #826A50 100%); }
-      .card:nth-child(11n) .card-photo { background: linear-gradient(160deg, #9C8568 0%, #4A3D2E 100%); }
       .card-photo img {
         width: 100%; height: 100%;
         object-fit: cover;
@@ -2247,7 +2211,34 @@ function GlobalStyle() {
       .map-begin-arrow { font-size: 18px; transition: transform 0.15s; }
       .map-begin-btn:hover .map-begin-arrow { transform: translateX(3px); }
 
-      .map-scroll { overflow-x: auto; padding-bottom: 24px; animation: fadeIn 0.6s ease both; }
+      .map-scroll-hint {
+        max-width: 1280px;
+        margin: 0 auto 12px;
+        display: inline-flex; align-items: center; gap: 8px;
+        font-family: 'Geist Mono', monospace;
+        font-size: 11px; font-weight: 500;
+        letter-spacing: 0.12em; text-transform: uppercase;
+        color: var(--accent);
+        padding: 6px 12px;
+        background: var(--paper);
+        border: 1px solid var(--accent);
+        border-radius: 100px;
+        animation: scrollHintBounce 1.6s ease-in-out infinite;
+      }
+      .scroll-hint-arrow { font-size: 14px; }
+      @keyframes scrollHintBounce {
+        0%, 100% { transform: translateX(0); }
+        50% { transform: translateX(6px); }
+      }
+
+      .map-scroll {
+        position: relative;
+        overflow-x: auto;
+        padding-bottom: 24px;
+        animation: fadeIn 0.6s ease both;
+        -webkit-mask-image: linear-gradient(to right, black 0%, black 92%, transparent 100%);
+        mask-image: linear-gradient(to right, black 0%, black 92%, transparent 100%);
+      }
       .map-scroll::-webkit-scrollbar { height: 8px; }
       .map-scroll::-webkit-scrollbar-thumb { background: rgba(20,17,13,0.18); border-radius: 4px; }
       .map-svg { width: ${VIEWBOX_W}px; min-width: 1200px; height: auto; display: block; }
@@ -2450,7 +2441,7 @@ function GlobalStyle() {
 
       .comp-card-photo {
         width: 100%; aspect-ratio: 1 / 1;
-        background: linear-gradient(160deg, #C9A878 0%, #6B5640 100%);
+        background: var(--bg-warm);
         border-bottom: 4px solid var(--trad);
         display: flex; align-items: center; justify-content: center;
         overflow: hidden;
@@ -2862,6 +2853,25 @@ function GlobalStyle() {
       .report-card-loading {
         text-align: center;
         padding: 48px 36px;
+      }
+      .report-card-error {
+        text-align: center;
+        padding: 36px;
+        border-color: var(--accent);
+      }
+      .report-card-error .report-card-label {
+        color: var(--accent);
+        margin-bottom: 12px;
+      }
+      .report-card-error-msg {
+        font-family: 'Geist', sans-serif;
+        font-size: 14px;
+        color: var(--ink-quiet);
+        line-height: 1.5;
+        margin: 0;
+        max-width: 480px;
+        margin-left: auto;
+        margin-right: auto;
       }
       .report-card-head {
         display: flex; align-items: baseline; justify-content: space-between;
