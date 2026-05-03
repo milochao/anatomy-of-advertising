@@ -27,9 +27,9 @@ const TRADITIONS = {
   empirical:    { label: "Empirical Data",        color: "#2F8F4D" },
   branding:     { label: "Brand Planning",        color: "#E2B12C" },
   consumer:     { label: "Consumer Research",     color: "#A89867" },
-  behavioural:  { label: "Behavioural Economics", color: "#7A5538" },
+  behavioral:  { label: "Behavioral Economics", color: "#7A5538" },
 };
-const TRAD_ORDER = ["ethics","rational","emotional","unconscious","empirical","branding","consumer","behavioural"];
+const TRAD_ORDER = ["ethics","rational","emotional","unconscious","empirical","branding","consumer","behavioral"];
 
 // ============================================================
 // PORTRAITS — loaded from a sibling /portraits/ folder.
@@ -49,7 +49,7 @@ function hasPortrait(t) { return t && !t.kind && PORTRAIT_AVAILABLE.has(t.id); }
 
 const ROW_Y = {
   ethics:140, rational:230, emotional:320, unconscious:410,
-  empirical:500, branding:590, consumer:680, behavioural:770,
+  empirical:500, branding:590, consumer:680, behavioral:770,
 };
 const COL_X = {
   bce:100, y1850:220, y1900:340, y1906:420, y1915:500, y1923:580,
@@ -131,7 +131,7 @@ const THINKERS = [
   { id:"freud", first:"Sigmund", last:"Freud", year:"1900", col:"y1900", tradition:"unconscious",
     bio:"The Interpretation of Dreams, 1900. The unconscious as discoverable territory. The intellectual root the rest of the unconscious tradition draws from." },
   { id:"dichter", first:"Ernest", last:"Dichter", year:"1950", col:"y1950", tradition:"unconscious",
-    bio:"Motivation research applied Freud to consumer behaviour. The cake mix and add-an-egg story is largely apocryphal. Food chemistry drove the egg requirement." },
+    bio:"Motivation research applied Freud to consumer behavior. The cake mix and add-an-egg story is largely apocryphal. Food chemistry drove the egg requirement." },
   { id:"packard", first:"Vance", last:"Packard", year:"1957", col:"y1957", tradition:"unconscious",
     bio:"The Hidden Persuaders, 1957. Public panic. Congressional hearings. The industry retreated from Dichter not because the work failed, but because the public found it monstrous." },
   { id:"gossage", first:"Howard", last:"Gossage", year:"1960s", col:"y1964", tradition:"unconscious", offsetY:80,
@@ -155,20 +155,20 @@ const THINKERS = [
     bio:"Made attention measurable, 2020. Showed that not all impressions are equal. Reframed media buying as attention buying." },
 
   { id:"king", first:"Stephen", last:"King", year:"1968", col:"y1968", tradition:"branding",
-    bio:"JWT, 1968. The T-Plan. Quantitative and Ehrenberg-informed. Brand strategy as the discipline that organises the work." },
+    bio:"JWT, 1968. The T-Plan. Quantitative and Ehrenberg-informed. Brand strategy as the discipline that organizes the work." },
 
   { id:"pollitt", first:"Stanley", last:"Pollitt", year:"1968", col:"y1968", tradition:"consumer",
     bio:"BMP, 1968. Account planning from consumer reality outward. Qualitative, not quantitative. Protects creative work from research that would flatten it. Distinct from King." },
 
-  { id:"cialdini", first:"Robert", last:"Cialdini", year:"1984", col:"y1984", tradition:"behavioural", ghost:true,
-    bio:"Influence, 1984. Reciprocity, commitment, social proof, authority, liking, scarcity. Behavioural science as a practitioner toolkit." },
-  { id:"thaler", first:"Richard", last:"Thaler", year:"2008", col:"y2008", tradition:"behavioural",
-    bio:"Nudge, 2008. Default settings as policy lever. Choice architecture as discipline. The behavioural turn made institutional." },
-  { id:"ariely", first:"Dan", last:"Ariely", year:"2008", col:"y2008", tradition:"behavioural", offsetY:80,
-    bio:"Predictably Irrational, 2008. Made behavioural economics a bestseller. The 2021 data fabrication should be named, not euphemised." },
-  { id:"kahneman", first:"Daniel", last:"Kahneman", year:"2011", col:"y2011", tradition:"behavioural",
+  { id:"cialdini", first:"Robert", last:"Cialdini", year:"1984", col:"y1984", tradition:"behavioral", ghost:true,
+    bio:"Influence, 1984. Reciprocity, commitment, social proof, authority, liking, scarcity. Behavioral science as a practitioner toolkit." },
+  { id:"thaler", first:"Richard", last:"Thaler", year:"2008", col:"y2008", tradition:"behavioral",
+    bio:"Nudge, 2008. Default settings as policy lever. Choice architecture as discipline. The behavioral turn made institutional." },
+  { id:"ariely", first:"Dan", last:"Ariely", year:"2008", col:"y2008", tradition:"behavioral", offsetY:80,
+    bio:"Predictably Irrational, 2008. Made behavioral economics a bestseller. The 2021 data fabrication should be named, not euphemized." },
+  { id:"kahneman", first:"Daniel", last:"Kahneman", year:"2011", col:"y2011", tradition:"behavioral",
     bio:"Thinking, Fast and Slow, 2011. Popularised System 1 and System 2. Stanovich and West coined the labels in 2000. Kahneman gave them to the field." },
-  { id:"sutherland", first:"Rory", last:"Sutherland", year:"2019", col:"y2019", tradition:"behavioural",
+  { id:"sutherland", first:"Rory", last:"Sutherland", year:"2019", col:"y2019", tradition:"behavioral",
     bio:"Alchemy, 2019. Argued perceived value is real value. Logic is one tool. Magic is another. The vice-chairman case for irrationality as advantage." },
 ];
 
@@ -206,7 +206,7 @@ const WARM_STARTS = [
 
 // Editorial explanations for the confidence labels
 const CONFIDENCE_EXPLANATIONS = {
-  high: "The figure spoke and wrote on these questions directly. Voice closely modelled.",
+  high: "The figure spoke and wrote on these questions directly. Voice closely modeled.",
   medium: "Position is documented. Voice is less distinctive — the reconstruction relies on inference.",
   low: "Limited firsthand record on these specific questions. Voice is largely reconstructed within their known stance.",
 };
@@ -394,7 +394,7 @@ Voice rules:
 - Practitioner register. Short declarative sentences. No hedging.
 - Concrete reference to your ideas, methods, work, or examples.
 - No pleasantries. No "I would argue." No academic puff. No em dashes.
-- Do not summarise the topic. Speak.
+- Do not summarize the topic. Speak.
 
 Return JSON only. No preamble. No fences. Schema:
 { "text": "your turn" }`;
@@ -511,7 +511,7 @@ Return JSON only. No preamble. No fences. Schema:
     "escalation": number,
     "productiveness": number
   },
-  "roomNote": "one short editorial sentence summarising the exchange",
+  "roomNote": "one short editorial sentence summarizing the exchange",
   "voiceFidelityA": number,
   "voiceFidelityB": number,
   "voiceNoteA": "one short note on A's reconstruction",
@@ -1021,27 +1021,58 @@ function Shell({ phase, onLeave, onMap, children }) {
 // ARRIVAL — quiet, single question, two warm starts, map link
 // ============================================================
 function ArrivalScreen({ warmStarts, thinkerById, onWarmStart, onOpenMap }) {
-  // Pick a random pair from WARM_STARTS for "Walk in"
   function walkIn() {
     const ws = warmStarts[Math.floor(Math.random() * warmStarts.length)];
     onWarmStart(ws.a, ws.b, ws.topic, ws.context);
   }
 
-  // Marquee: all portraits in display order, doubled so the loop reads continuous
   const marqueeIds = THINKERS.filter(t => PORTRAIT_AVAILABLE.has(t.id)).map(t => t.id);
   const marqueeDoubled = [...marqueeIds, ...marqueeIds];
 
   return (
     <section className="arrival arrival-salon">
       <div className="arrival-bg" aria-hidden="true" />
+
       <div className="arrival-inner">
-        <div className="arrival-eyebrow">A salon, not a syllabus.</div>
-        <h1 className="arrival-question">
-          Pull up a chair.
-        </h1>
-        <p className="arrival-sub">
-          Thirty-two arguers. Some agree. Most don't. All of them are talking.
-        </p>
+        <h1 className="arrival-title">The Anatomy of Advertising</h1>
+        <p className="arrival-tag"><em>A simulated salon, sans the hair dryer.</em></p>
+
+        <div className="arrival-prose">
+          <p>
+            You pick two figures from advertising history. They talk about whatever you put in front of them. Sometimes they fight. Sometimes they find common ground. You push back, ask follow-ups, save the transcript.
+          </p>
+          <p>
+            The cast: thirty-two figures. Claude Hopkins, who made advertising measurable in the 1920s. Twenty-six more, from Aristotle to Karen Nelson-Field.
+          </p>
+
+          <h3 className="arrival-section-head">What they talk about.</h3>
+          <p>
+            Whatever you give them. Some of the big ones:
+          </p>
+          <ul className="arrival-bullets">
+            <li>Does advertising work <em>because</em> we measure it, or <em>in spite of</em> it?</li>
+            <li>Is persuasion rational or emotional?</li>
+            <li>What is creativity actually for?</li>
+          </ul>
+          <p>
+            Or paste a brief, type a claim, throw a question. The salon finds the productive ground and runs it.
+          </p>
+
+          <h3 className="arrival-section-head">How it works.</h3>
+          <p>
+            Pick two from the map. Type your prompt. Six rounds. A referee stops them talking past each other.
+          </p>
+
+          <h3 className="arrival-section-head">What you get.</h3>
+          <p>
+            A score on how sharp the exchange got. A reading of how close each stayed to what they actually wrote. The sharpest line. What got dodged or conceded. Then push them harder, ask one of them directly, bring in a different pair, or save the transcript.
+          </p>
+
+          <h3 className="arrival-section-head">About the voices.</h3>
+          <p>
+            Reconstructions, not quotes. Each figure is modeled on the documented record. Books, papers, lectures, interviews. Where the record is thin, the report card will tell you. Nothing here pretends to be a transcript.
+          </p>
+        </div>
 
         <button onClick={walkIn} className="arrival-walk-in">
           <span className="arrival-walk-in-text">Walk in</span>
@@ -1049,7 +1080,7 @@ function ArrivalScreen({ warmStarts, thinkerById, onWarmStart, onOpenMap }) {
         </button>
 
         <button onClick={onOpenMap} className="arrival-quiet-link">
-          or pick your own two &rarr;
+          or pick your own pairing &rarr;
         </button>
       </div>
 
@@ -1931,94 +1962,148 @@ function GlobalStyle() {
 
       /* ---- Arrival ---- */
       .arrival {
-        min-height: calc(100vh - 70px);
-        display: flex; align-items: center; justify-content: center;
-        padding: 80px 40px;
         position: relative;
+        min-height: calc(100vh - 70px);
+        padding: 60px 6vw 200px;
         overflow: hidden;
+        display: flex;
+        align-items: center;
       }
 
+      /* Pinned full-bleed Algonquin behind everything */
       .arrival-salon .arrival-bg {
         position: absolute;
-        top: 0; right: -8%; bottom: 0;
-        width: 56%;
+        top: 0; left: 0; right: 0; bottom: 0;
         background-image: url("./assets/algonquin.svg");
         background-repeat: no-repeat;
-        background-position: center right;
-        background-size: contain;
-        opacity: 0.16;
+        background-position: center center;
+        background-size: cover;
+        opacity: 0.18;
         pointer-events: none;
         z-index: 0;
         animation: bgFade 2.4s ease 0.2s both;
       }
+      @keyframes bgFade {
+        from { opacity: 0; }
+        to { opacity: 0.18; }
+      }
+
+      /* Cream wash so copy reads on top of illustration */
       .arrival-salon::before {
         content: "";
         position: absolute;
         top: 0; left: 0; right: 0; bottom: 0;
-        background: linear-gradient(
-          to right,
-          var(--paper) 0%,
-          var(--paper) 35%,
-          rgba(244, 239, 228, 0.85) 55%,
-          rgba(244, 239, 228, 0.4) 80%,
-          rgba(244, 239, 228, 0) 100%
+        background: radial-gradient(
+          ellipse at left center,
+          rgba(244, 239, 228, 0.94) 0%,
+          rgba(244, 239, 228, 0.65) 55%,
+          rgba(244, 239, 228, 0.35) 100%
         );
         pointer-events: none;
         z-index: 1;
       }
-      @keyframes bgFade {
-        from { opacity: 0; }
-        to { opacity: 0.16; }
-      }
 
       .arrival-inner {
-        max-width: 720px; width: 100%;
         position: relative;
         z-index: 2;
-        margin-right: auto;
-        margin-left: 4%;
-        animation: arrivalFade 1.2s ease 0.1s both;
-        padding-bottom: 180px;
+        max-width: 720px;
+        animation: arrivalFade 1.2s ease 0.15s both;
       }
       @keyframes arrivalFade { from { opacity: 0; } to { opacity: 1; } }
       @keyframes pairFade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 
-      .arrival-eyebrow {
-        font-family: 'Fraunces', serif; font-style: italic;
-        font-size: 15px; color: var(--mid);
-        font-variation-settings: "opsz" 18;
-        margin-bottom: 22px;
-        opacity: 0;
-        animation: pairFade 0.9s ease 0.4s both;
-      }
-
-      .arrival-question {
+      .arrival-title {
         font-family: 'Fraunces', serif;
-        font-size: clamp(56px, 8vw, 112px);
-        font-weight: 400;
+        font-size: clamp(38px, 5vw, 64px);
+        font-weight: 500;
         font-variation-settings: "opsz" 144;
         letter-spacing: -0.03em;
-        line-height: 0.96; color: var(--ink); margin: 0 0 20px;
-        max-width: 14ch;
+        line-height: 1.0;
+        color: var(--ink);
+        margin: 0 0 14px;
       }
-      .arrival-sub {
-        font-family: 'Fraunces', serif; font-style: italic;
-        font-size: clamp(18px, 1.6vw, 22px);
-        color: var(--mid); margin: 0 0 56px;
-        font-variation-settings: "opsz" 24;
-        max-width: 32ch;
-        line-height: 1.4;
+
+      .arrival-tag {
+        font-family: 'Fraunces', serif;
+        font-size: clamp(17px, 1.4vw, 20px);
+        color: var(--mid);
+        margin: 0 0 36px;
+        font-variation-settings: "opsz" 22;
         opacity: 0;
-        animation: pairFade 0.9s ease 0.6s both;
+        animation: pairFade 0.8s ease 0.3s both;
       }
+      .arrival-tag em { font-style: italic; }
+
+      .arrival-prose {
+        font-family: 'Fraunces', serif;
+        font-size: clamp(17px, 1.3vw, 19px);
+        line-height: 1.65;
+        color: var(--ink-quiet);
+        font-variation-settings: "opsz" 20;
+        max-width: 60ch;
+        margin: 0 0 40px;
+      }
+      .arrival-prose p {
+        margin: 0 0 16px;
+        opacity: 0;
+        animation: pairFade 0.8s ease both;
+      }
+      .arrival-prose > *:nth-child(1) { animation-delay: 0.45s; }
+      .arrival-prose > *:nth-child(2) { animation-delay: 0.6s; }
+      .arrival-prose > *:nth-child(3) { animation-delay: 0.75s; }
+      .arrival-prose > *:nth-child(4) { animation-delay: 0.9s; }
+      .arrival-prose > *:nth-child(5) { animation-delay: 1.0s; }
+      .arrival-prose > *:nth-child(6) { animation-delay: 1.1s; }
+      .arrival-prose > *:nth-child(7) { animation-delay: 1.2s; }
+      .arrival-prose > *:nth-child(8) { animation-delay: 1.3s; }
+      .arrival-prose > *:nth-child(9) { animation-delay: 1.4s; }
+      .arrival-prose > *:nth-child(10) { animation-delay: 1.5s; }
+      .arrival-prose > *:nth-child(11) { animation-delay: 1.6s; }
+      .arrival-prose > *:nth-child(12) { animation-delay: 1.7s; }
+      .arrival-prose > *:nth-child(n+13) { animation-delay: 1.8s; }
+
+      .arrival-section-head {
+        font-family: 'Fraunces', serif;
+        font-style: italic;
+        font-weight: 500;
+        font-size: clamp(18px, 1.5vw, 22px);
+        color: var(--ink);
+        margin: 26px 0 8px;
+        font-variation-settings: "opsz" 24;
+        opacity: 0;
+        animation: pairFade 0.8s ease both;
+      }
+
+      .arrival-bullets {
+        list-style: none;
+        padding: 0;
+        margin: 0 0 16px;
+      }
+      .arrival-bullets li {
+        position: relative;
+        padding-left: 22px;
+        margin: 0 0 8px;
+        opacity: 0;
+        animation: pairFade 0.8s ease both;
+      }
+      .arrival-bullets li::before {
+        content: "·";
+        position: absolute;
+        left: 6px;
+        top: 0;
+        font-size: 1.4em;
+        color: var(--whisper);
+        line-height: 1;
+      }
+      .arrival-bullets em { font-style: italic; color: var(--ink); }
 
       .arrival-walk-in {
         background: var(--ink);
         color: var(--paper);
         border: none;
-        padding: 22px 36px;
+        padding: 20px 32px;
         font-family: 'Fraunces', serif;
-        font-size: 22px;
+        font-size: 20px;
         font-variation-settings: "opsz" 28;
         letter-spacing: -0.01em;
         cursor: pointer;
@@ -2027,14 +2112,14 @@ function GlobalStyle() {
         gap: 14px;
         transition: gap 0.3s ease, background 0.3s ease;
         opacity: 0;
-        animation: pairFade 0.9s ease 0.85s both;
+        animation: pairFade 0.9s ease 1.6s both;
       }
       .arrival-walk-in:hover {
         gap: 22px;
         background: #2d251f;
       }
       .arrival-walk-in-arrow {
-        font-size: 22px;
+        font-size: 20px;
         transition: transform 0.3s ease;
       }
       .arrival-walk-in:hover .arrival-walk-in-arrow {
@@ -2044,7 +2129,7 @@ function GlobalStyle() {
       .arrival-quiet-link {
         display: block;
         background: none; border: none;
-        margin-top: 22px;
+        margin-top: 20px;
         padding: 6px 0;
         font-family: 'Fraunces', serif;
         font-style: italic;
@@ -2053,12 +2138,12 @@ function GlobalStyle() {
         cursor: pointer;
         font-variation-settings: "opsz" 18;
         opacity: 0;
-        animation: pairFade 0.9s ease 1.0s both;
+        animation: pairFade 0.9s ease 1.8s both;
         transition: color 0.2s;
       }
       .arrival-quiet-link:hover { color: var(--ink); }
 
-      /* Marquee */
+      /* MARQUEE — pinned at bottom */
       .arrival-marquee {
         position: absolute;
         bottom: 32px;
@@ -2068,13 +2153,13 @@ function GlobalStyle() {
         mask-image: linear-gradient(to right, transparent 0%, black 6%, black 94%, transparent 100%);
         -webkit-mask-image: linear-gradient(to right, transparent 0%, black 6%, black 94%, transparent 100%);
         opacity: 0;
-        animation: pairFade 1.2s ease 1.4s both;
+        animation: pairFade 1.2s ease 2.0s both;
       }
       .arrival-marquee-track {
         display: flex;
         gap: 32px;
         width: max-content;
-        animation: marqueeScroll 90s linear infinite;
+        animation: marqueeScroll 110s linear infinite;
       }
       @keyframes marqueeScroll {
         from { transform: translateX(0); }
@@ -2112,15 +2197,16 @@ function GlobalStyle() {
       }
 
       @media (max-width: 720px) {
-        .arrival-salon .arrival-bg {
-          width: 90%; right: -20%;
-          opacity: 0.10;
-        }
-        .arrival-inner { margin-left: 0; padding-bottom: 160px; }
-        .arrival-question { font-size: clamp(44px, 12vw, 64px); }
+        .arrival { padding: 40px 24px 180px; }
+        .arrival-salon .arrival-bg { opacity: 0.12; }
+        .arrival-title { font-size: clamp(28px, 7vw, 40px); }
+        .arrival-tag { font-size: 16px; }
+        .arrival-prose { font-size: 17px; }
         .arrival-marquee-portrait { width: 52px; height: 52px; }
         .arrival-marquee-track { gap: 22px; }
       }
+
+
 
       /* ---- Mobile map list ---- */
       .map-list { display: none; max-width: 720px; margin: 0 auto; }
