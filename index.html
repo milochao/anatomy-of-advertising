@@ -7,8 +7,11 @@
 <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script crossorigin src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;1,9..144,400&family=JetBrains+Mono:wght@400;500&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-  html, body { margin: 0; padding: 0; background: #f4efe4; }
+  html, body { margin: 0; padding: 0; background: #F5F1E8; }
 </style>
 </head>
 <body>
@@ -32,9 +35,7 @@ const TRADITIONS = {
 const TRAD_ORDER = ["ethics","rational","emotional","unconscious","empirical","branding","consumer","behavioral"];
 
 // ============================================================
-// PORTRAITS — loaded from a sibling /portraits/ folder.
-// Falls back gracefully when a portrait is missing (Starch & Gallup,
-// non-debater stations, etc.). Drop in {id}.png to add new portraits.
+// PORTRAITS
 // ============================================================
 const PORTRAIT_BASE = "portraits";
 function portraitURL(id) { return `${PORTRAIT_BASE}/${id}.png`; }
@@ -62,10 +63,7 @@ const VIEWBOX_W = 2740;
 const VIEWBOX_H = 940;
 
 // ============================================================
-// CONFIDENCE TIERS — primary-text reconstruction confidence
-// High: well-documented voice, prominent in training
-// Medium: documented positions, voice less distinctive
-// Low: figures with limited firsthand record on these questions
+// CONFIDENCE TIERS
 // ============================================================
 const HIGH_CONFIDENCE = new Set([
   "hopkins","bernbach","ogilvy","reeves","sharp","kahneman",
@@ -87,9 +85,6 @@ const CONFIDENCE_NOTES = {
   low:    "Voice largely reconstructed",
 };
 
-// ============================================================
-// KIND LABELS — for non-debater entries on the map
-// ============================================================
 const KIND_NOTES = {
   ad:         "An advertisement, not a debater",
   event:      "An event, not a debater",
@@ -178,33 +173,14 @@ const BRIDGES = [
   { fromTrad:"emotional",toTrad:"empirical", col:"y2013" },
 ];
 
-// ============================================================
-// WARM STARTS — three productive pairings for arrival
-// Each carries the question that frames the fight and a small line of stakes.
-// ============================================================
 const WARM_STARTS = [
-  {
-    a:"hopkins", b:"pollitt",
-    question:"What should research do?",
-    topic:"what research should do",
+  { a:"hopkins", b:"pollitt", question:"What should research do?", topic:"what research should do",
     subtitle:"The foundational fight.",
-    context:"Hopkins set the rules for measuring what works. Pollitt set the rules for understanding what matters. They never agreed. Modern advertising still doesn't.",
-  },
-  {
-    a:"sharp", b:"bernbach",
-    question:"What is creativity for?",
-    topic:"creativity",
-    subtitle:"Data against instinct.",
-  },
-  {
-    a:"reeves", b:"heath",
-    question:"What counts as proof?",
-    topic:"what counts as proof",
-    subtitle:"What you can prove against what you can't.",
-  },
+    context:"Hopkins set the rules for measuring what works. Pollitt set the rules for understanding what matters. They never agreed. Modern advertising still doesn't." },
+  { a:"sharp", b:"bernbach", question:"What is creativity for?", topic:"creativity", subtitle:"Data against instinct." },
+  { a:"reeves", b:"heath", question:"What counts as proof?", topic:"what counts as proof", subtitle:"What you can prove against what you can't." },
 ];
 
-// Editorial explanations for the confidence labels
 const CONFIDENCE_EXPLANATIONS = {
   high: "The figure spoke and wrote on these questions directly. Voice closely modeled.",
   medium: "Position is documented. Voice is less distinctive — the reconstruction relies on inference.",
@@ -212,19 +188,19 @@ const CONFIDENCE_EXPLANATIONS = {
 };
 
 // ============================================================
-// MAIN — phase state machine
+// MAIN
 // ============================================================
 function AnatomyOfAdvertising() {
-  const [phase, setPhase] = useState("arrival"); // arrival | map | composition | exchange
+  const [phase, setPhase] = useState("arrival");
   const [slotA, setSlotA] = useState(null);
   const [slotB, setSlotB] = useState(null);
   const [topic, setTopic] = useState("");
-  const [exchange, setExchange] = useState(null); // { topic, turns: [{speaker, text}] }
+  const [exchange, setExchange] = useState(null);
   const [visibleTurns, setVisibleTurns] = useState(0);
   const [loadingText, setLoadingText] = useState(null);
   const [error, setError] = useState(null);
   const [hoveredId, setHoveredId] = useState(null);
-  const [followUpFor, setFollowUpFor] = useState(null); // 'A' | 'B' | null
+  const [followUpFor, setFollowUpFor] = useState(null);
   const [followUpText, setFollowUpText] = useState("");
   const [starterContext, setStarterContext] = useState(null);
   const [exportFeedback, setExportFeedback] = useState(null);
@@ -240,7 +216,6 @@ function AnatomyOfAdvertising() {
   const slotBObj = slotB ? thinkerById[slotB] : null;
   const hoveredObj = hoveredId ? thinkerById[hoveredId] : null;
 
-  // ---- Navigation ----
   function goArrival() {
     setPhase("arrival"); setSlotA(null); setSlotB(null);
     setTopic(""); setExchange(null); setVisibleTurns(0);
@@ -257,7 +232,6 @@ function AnatomyOfAdvertising() {
       if (!window.__aoaCtx) window.__aoaCtx = new Ctx();
       const ctx = window.__aoaCtx;
       if (ctx.state === "suspended") ctx.resume();
-      // Short, soft click: noise burst into a quick decay envelope
       const now = ctx.currentTime;
       const buf = ctx.createBuffer(1, 256, ctx.sampleRate);
       const data = buf.getChannelData(0);
@@ -355,7 +329,6 @@ function AnatomyOfAdvertising() {
     }
   }
 
-  // ---- API calls ----
   async function callClaude(prompt, maxTokens = 1500) {
     const res = await fetch("/api/claude", {
       method:"POST",
@@ -385,7 +358,6 @@ function AnatomyOfAdvertising() {
     return JSON.parse(clean);
   }
 
-  // Build a transcript string from turns so far, for use as context in the next call
   function transcriptText(turns, aObj, bObj) {
     return turns.map(t => {
       if (t.speaker === "host") return `HOST (to ${t.target}): ${t.text}`;
@@ -394,8 +366,6 @@ function AnatomyOfAdvertising() {
     }).join("\n\n");
   }
 
-  // Generate a single turn, given the current speaker and prior transcript.
-  // The model only sees what has been said. It cannot pre-plan future turns.
   async function generateTurn({ speakerKey, aObj, bObj, topic, priorTurns, isOpening }) {
     const speaker = speakerKey === "A" ? aObj : bObj;
     const opponent = speakerKey === "A" ? bObj : aObj;
@@ -429,8 +399,6 @@ Return JSON only. No preamble. No fences. Schema:
     return { speaker: speakerKey, text: result.text };
   }
 
-  // After a turn is generated, score whether it actually engaged with the prior turn.
-  // If it failed, regenerate once. This catches the parallel-monologue failure mode.
   async function refereeAndMaybeRegenerate({ turn, speakerKey, aObj, bObj, topic, priorTurns, isOpening }) {
     if (isOpening || priorTurns.length === 0) return turn;
     const lastOpponentTurn = [...priorTurns].reverse().find(t => t.speaker !== speakerKey && t.speaker !== "host");
@@ -458,7 +426,6 @@ Return JSON only. Schema:
       const verdict = await callClaude(refPrompt, 200);
       if (verdict.engages) return turn;
 
-      // Regenerate once, with the referee's note as a constraint
       const speaker2 = speakerKey === "A" ? aObj : bObj;
       const opponent2 = speakerKey === "A" ? bObj : aObj;
       const prior = transcriptText(priorTurns, aObj, bObj);
@@ -480,15 +447,10 @@ Return JSON only. Schema: { "text": "your turn" }`;
       const fixed = await callClaude(fixPrompt, 600);
       return { speaker: speakerKey, text: fixed.text };
     } catch (e) {
-      // If the referee call itself fails, keep the original turn
       return turn;
     }
   }
 
-  // ---- The referee. Scores the exchange after it completes. ----
-  // Two scores: Room Score (0-100) for the dialectic itself across five
-  // dimensions, and Voice Fidelity (0-100 per figure) for how close the
-  // reconstruction sits to the documented record.
   async function evaluateExchange(turnsArg, aObj, bObj, topic, opts = {}) {
     const transcript = turnsArg.map((t, i) => {
       if (t.speaker === "host") return `[host, to ${t.target}]: ${t.text}`;
@@ -557,14 +519,13 @@ Return JSON only. No preamble. No fences. Schema:
   }
 
   async function scoreCurrentExchange(turnsArg, aObj, bObj, topic) {
-    if (!turnsArg || turnsArg.length < 4) return; // need real exchange
+    if (!turnsArg || turnsArg.length < 4) return;
     setScoringInFlight(true);
     try {
       const card = await evaluateExchange(turnsArg, aObj, bObj, topic);
       setRoomCard(card);
     } catch (e) {
       console.error("Scoring failed:", e);
-      // Silent failure — the exchange still ships without a card.
     } finally {
       setScoringInFlight(false);
     }
@@ -576,7 +537,6 @@ Return JSON only. No preamble. No fences. Schema:
     setRoomCard(null); setPriorRoomScore(null); setRoundCount(1);
     const usedTopic = (topicArg || "").trim();
 
-    // Phase 1 — choose or refine the topic
     setLoadingText(`${slotAObj.last} and ${slotBObj.last} are taking their seats.`);
     let topicPhrase = usedTopic;
     if (!topicPhrase) {
@@ -593,7 +553,6 @@ Return JSON only. Schema: { "topic": "the topic" }`, 200);
       }
     }
 
-    // Phase 2 — generate turns sequentially. Each turn sees only what came before.
     const turns = [];
     const speakers = ["A", "B", "A", "B", "A", "B"];
     const initial = {
@@ -622,7 +581,6 @@ Return JSON only. Schema: { "topic": "the topic" }`, 200);
           isOpening: i === 0,
         });
 
-        // Referee pass on responses (not on the opening turn)
         if (i > 0) {
           setLoadingText(`Checking that ${speakerName} actually responded.`);
           turn = await refereeAndMaybeRegenerate({
@@ -635,12 +593,10 @@ Return JSON only. Schema: { "topic": "the topic" }`, 200);
         }
 
         turns.push(turn);
-        // Reveal the turn immediately as it lands
         setExchange({ ...initial, turns: [...turns] });
         setVisibleTurns(turns.length);
       }
       setLoadingText(null);
-      // After all turns land, score the exchange. Async, non-blocking.
       scoreCurrentExchange(turns, slotAObj, slotBObj, topicPhrase);
     } catch (e) {
       console.error(e);
@@ -649,25 +605,12 @@ Return JSON only. Schema: { "topic": "the topic" }`, 200);
     }
   }
 
-  // Reveal animation is no longer needed — turns appear as they generate.
-  // Kept as a passthrough for the continue/pushback/follow-up paths that still batch.
-  function revealTurns(fromIndex, toIndex) {
-    setVisibleTurns(toIndex);
-  }
-
-  // ---- Round types. Two ways to escalate after a scored exchange. ----
-
-  // Push them harder on the same topic. The referee's open-ground notes
-  // become the agenda. The new exchange has explicit pressure constraints.
   async function pushHarder() {
     if (!exchange || !roomCard || !slotAObj || !slotBObj) return;
     setPriorRoomScore(roomCard.roomScore);
     setRoundCount(r => r + 1);
     setError(null);
 
-    // Build a constrained re-run of the same topic with the prior round's
-    // weakness as the agenda. Same engine as runExchange, but the prompt
-    // injects the open-ground notes.
     const topicPhrase = exchange.topic;
     setExchange(null); setVisibleTurns(0);
     const newInitial = {
@@ -698,8 +641,6 @@ Return JSON only. Schema: { "topic": "the topic" }`, 200);
             : `${speaker.last} is responding to ${opponent.last}.`
         );
 
-        // Constrained generation — the speaker must address their open-ground
-        // weakness from the prior round.
         const prior = transcriptText(turns, slotAObj, slotBObj);
         const isOpening = i === 0;
         const constraint = isOpening
@@ -754,13 +695,11 @@ Return JSON only. Schema: { "text": "your turn" }`;
     }
   }
 
-  // Same pair, new question. Clears the old exchange, prompts the user for
-  // a new topic, then runs the engine fresh.
   function newQuestionSamePair() {
     setExchange(null); setVisibleTurns(0); setRoomCard(null);
     setRoundCount(1); setPriorRoomScore(null);
     setTopic(""); setStarterContext(null);
-    setPhase("composition"); // back to topic entry with the same pair
+    setPhase("composition");
   }
 
   async function continueExchange() {
@@ -802,7 +741,6 @@ Return JSON only. Schema: { "text": "your turn" }`;
         setVisibleTurns(working.length);
       }
       setLoadingText(null);
-      // Re-score with the extended exchange. Replaces the prior card.
       setRoomCard(null);
       scoreCurrentExchange(working, slotAObj, slotBObj, exchange.topic);
     } catch (e) {
@@ -827,7 +765,6 @@ Return JSON only. Schema: { "text": "your turn" }`;
     let working = [...exchange.turns];
 
     try {
-      // Turn one: the challenger pushes back hard
       setLoadingText(`${challengerName} is pushing back on ${defenderName}.`);
       const prior = transcriptText(working, slotAObj, slotBObj);
       const challengePrompt = `You are speaking as ${challenger.first} ${challenger.last} (${challenger.year}). The host wants you to push back hard on what ${defenderName} just said.
@@ -849,7 +786,6 @@ Return JSON only. Schema: { "text": "your push-back" }`;
       setExchange({ ...exchange, turns: working });
       setVisibleTurns(working.length);
 
-      // Turn two: the defender responds to the push-back
       setLoadingText(`${defenderName} is defending.`);
       let defendTurn = await generateTurn({
         speakerKey: defenderKey,
@@ -892,14 +828,12 @@ Return JSON only. Schema: { "text": "your push-back" }`;
     setError(null);
     setFollowUpFor(null); setFollowUpText("");
 
-    // Inject the host question as a turn so the rest of the conversation can see it
     const hostTurn = { speaker: "host", text: question, target: target.last };
     let working = [...exchange.turns, hostTurn];
     setExchange({ ...exchange, turns: working });
     setVisibleTurns(working.length);
 
     try {
-      // Turn one: target answers the host
       setLoadingText(`${target.last} is answering your question.`);
       const prior = transcriptText(working, slotAObj, slotBObj);
       const answerPrompt = `You are speaking as ${target.first} ${target.last} (${target.year}). The host has just put a question to you in this debate with ${other.last}.
@@ -921,7 +855,6 @@ Return JSON only. Schema: { "text": "your answer" }`;
       setExchange({ ...exchange, turns: working });
       setVisibleTurns(working.length);
 
-      // Turn two: the other figure reacts
       setLoadingText(`${other.last} is reacting to ${target.last}'s answer.`);
       let reactTurn = await generateTurn({
         speakerKey: otherKey,
@@ -954,7 +887,6 @@ Return JSON only. Schema: { "text": "your answer" }`;
     }
   }
 
-  // ---- Render ----
   return (
     <div className="aoa-root">
       <GlobalStyle />
@@ -1021,18 +953,19 @@ Return JSON only. Schema: { "text": "your answer" }`;
 }
 
 // ============================================================
-// SHELL
+// SHELL — playful header
 // ============================================================
 function Shell({ phase, onLeave, onMap, children }) {
   return (
     <>
       <header className="aoa-header">
         <button className="aoa-wordmark" onClick={onLeave} aria-label="Return to start">
-          <span className="aoa-wordmark-the">The</span> Anatomy of Advertising
+          <span className="aoa-pulse"></span>
+          <span className="aoa-wordmark-text">Anatomy of Advertising</span>
         </button>
         <nav className="aoa-nav">
           {phase !== "map" && phase !== "arrival" && (
-            <button className="aoa-link" onClick={onMap}>The map</button>
+            <button className="aoa-link" onClick={onMap}>The roster</button>
           )}
           {phase !== "arrival" && (
             <button className="aoa-link" onClick={onLeave}>Leave</button>
@@ -1045,82 +978,86 @@ function Shell({ phase, onLeave, onMap, children }) {
 }
 
 // ============================================================
-// ARRIVAL — quiet, single question, two warm starts, map link
+// ARRIVAL — playful, game-mode
 // ============================================================
 function ArrivalScreen({ warmStarts, thinkerById, onWarmStart, onOpenMap }) {
-  function walkIn() {
-    onOpenMap();
-  }
-
-  const marqueeIds = THINKERS.filter(t => PORTRAIT_AVAILABLE.has(t.id)).map(t => t.id);
-  const marqueeDoubled = [...marqueeIds, ...marqueeIds];
-
+  const cast = THINKERS.filter(t => !t.kind);
   return (
-    <section className="arrival arrival-salon">
-      <div className="arrival-bg" aria-hidden="true" />
-
-      <div className="arrival-inner">
-        <h1 className="arrival-title">The Anatomy of Advertising</h1>
-        <p className="arrival-tag"><em>A simulated salon, sans the hair dryer.</em></p>
-
-        <div className="arrival-prose">
-          <p>
-            You pick two figures from advertising history. They talk about whatever you put in front of them. Sometimes they fight. Sometimes they find common ground. You push back, ask follow-ups, save the transcript.
-          </p>
-          <p>
-            The cast: thirty-two figures. Claude Hopkins, who made advertising measurable in the 1920s. Twenty-six more, from Aristotle to Karen Nelson-Field.
-          </p>
-
-          <h3 className="arrival-section-head">What they talk about.</h3>
-          <p>
-            Whatever you give them. Some of the big ones:
-          </p>
-          <ul className="arrival-bullets">
-            <li>Does advertising work <em>because</em> we measure it, or <em>in spite of</em> it?</li>
-            <li>Is persuasion rational or emotional?</li>
-            <li>What is creativity actually for?</li>
-          </ul>
-          <p>
-            Or paste a brief, type a claim, throw a question. The salon finds the productive ground and runs it.
-          </p>
-
-          <h3 className="arrival-section-head">How it works.</h3>
-          <p>
-            Pick two from the map. Type your prompt. Six rounds. A referee stops them talking past each other.
-          </p>
-
-          <h3 className="arrival-section-head">What you get.</h3>
-          <p>
-            A score on how sharp the exchange got. A reading of how close each stayed to what they actually wrote. The sharpest line. What got dodged or conceded. Then push them harder, ask one of them directly, bring in a different pair, or save the transcript.
-          </p>
-
-          <h3 className="arrival-section-head">About the voices.</h3>
-          <p>
-            Reconstructions, not quotes. Each figure is modeled on the documented record. Books, papers, lectures, interviews. Where the record is thin, the report card will tell you. Nothing here pretends to be a transcript.
-          </p>
+    <section className="arrival">
+      <div className="arrival-hero">
+        <div className="pre-headline">
+          <span className="live-dot"></span>
+          <span>The room is open</span>
         </div>
 
-        <button onClick={walkIn} className="arrival-walk-in">
-          <span className="arrival-walk-in-text">Walk in</span>
-          <span className="arrival-walk-in-arrow">&rarr;</span>
-        </button>
+        <h1 className="big-headline">
+          <span className="bh-word">Pick</span>{" "}
+          <span className="bh-word">a</span>{" "}
+          <span className="bh-word bh-fight">fight</span>.
+        </h1>
+
+        <p className="big-deck">
+          Thirty-two figures who built advertising theory. <strong>Pick two.</strong> Set the topic. They go six rounds. A referee stops them talking past each other.
+        </p>
+
+        <div className="mechanics">
+          <div className="chip"><span className="num">1</span>Pick two</div>
+          <div className="chip"><span className="num">2</span>Set the topic</div>
+          <div className="chip"><span className="num">3</span>Six rounds</div>
+          <div className="chip"><span className="num">4</span>Take the transcript</div>
+        </div>
+
+        <div className="scrawl scrawl-1">
+          <span className="scr-arrow">↘</span>start here
+        </div>
       </div>
 
-      <div className="arrival-marquee" aria-hidden="true">
-        <div className="arrival-marquee-track">
-          {marqueeDoubled.map((id, i) => {
-            const t = thinkerById[id];
-            if (!t) return null;
-            const tradColor = TRADITIONS[t.tradition].color;
+      <div className="cast-section">
+        <div className="cast-header">
+          <span className="cast-label">→ The roster · 32 figures</span>
+          <span className="cast-sub">Click any to inspect · pick two on the next screen</span>
+        </div>
+
+        <div className="cast-grid">
+          {cast.map((t, i) => {
+            const trad = TRADITIONS[t.tradition];
+            const portrait = hasPortrait(t);
+            const conf = getConfidence(t);
+            const showBadge = (i % 7 === 0) || conf === "high";
             return (
-              <div key={`${id}-${i}`} className="arrival-marquee-item">
-                <div className="arrival-marquee-portrait" style={{ borderColor: tradColor }}>
-                  <img src={portraitURL(id)} alt="" />
+              <button key={t.id} className="card" onClick={onOpenMap}
+                style={{ ['--trad']: trad.color }}>
+                {showBadge && conf === "high" && (
+                  <div className="card-badge">★</div>
+                )}
+                <div className="card-photo" style={{ borderBottomColor: trad.color }}>
+                  {portrait ? (
+                    <img src={portraitURL(t.id)} alt="" />
+                  ) : (
+                    <span className="card-initial">{t.last[0]}</span>
+                  )}
                 </div>
-                <div className="arrival-marquee-name">{t.last}</div>
-              </div>
+                <div className="card-meta">
+                  <div className="card-name">{t.last}</div>
+                  <div className="card-year">{t.year}</div>
+                </div>
+              </button>
             );
           })}
+        </div>
+
+        <div className="scrawl scrawl-2">
+          <span className="scr-arrow">↗</span>or just hit walk in
+        </div>
+      </div>
+
+      <div className="arrival-cta">
+        <button className="walk-in" onClick={onOpenMap}>
+          Walk in
+          <span className="walk-arrow">→</span>
+        </button>
+        <div className="cta-aside">
+          <span>Free</span><span className="sep">/</span><span>No login</span><span className="sep">/</span><span>Six rounds per session</span>
         </div>
       </div>
     </section>
@@ -1128,7 +1065,7 @@ function ArrivalScreen({ warmStarts, thinkerById, onWarmStart, onOpenMap }) {
 }
 
 // ============================================================
-// MAP — subway map, secondary entry point
+// MAP — subway map preserved, palette and chrome moved to playful
 // ============================================================
 function MapScreen({ slotA, slotB, hoveredId, hoveredObj, onTap, onHover, onClear, onLeave, onBegin }) {
   const stations = THINKERS.map(t => ({
@@ -1138,13 +1075,14 @@ function MapScreen({ slotA, slotB, hoveredId, hoveredObj, onTap, onHover, onClea
   return (
     <section className="map-screen">
       <div className="map-prelude">
-        <p className="map-prelude-text">
-          {!slotA && !slotB && "Pick two figures."}
-          {slotA && !slotB && "Pick one more."}
-          {slotA && slotB && "Two seated. Begin when ready."}
-        </p>
+        <div className="map-prelude-pill">
+          <span className="live-dot"></span>
+          {!slotA && !slotB && <span>Pick two figures</span>}
+          {slotA && !slotB && <span>One picked. Pick one more.</span>}
+          {slotA && slotB && <span>Both picked. Begin when ready.</span>}
+        </div>
         {(slotA || slotB) && (
-          <button onClick={onClear} className="aoa-link aoa-link-quiet">Clear selection</button>
+          <button onClick={onClear} className="map-clear-btn">Clear</button>
         )}
       </div>
 
@@ -1152,7 +1090,7 @@ function MapScreen({ slotA, slotB, hoveredId, hoveredObj, onTap, onHover, onClea
         <div className="map-begin-bar">
           <button onClick={onBegin} className="map-begin-btn">
             <span>Begin</span>
-            <span className="map-begin-arrow">&rarr;</span>
+            <span className="map-begin-arrow">→</span>
           </button>
         </div>
       )}
@@ -1161,7 +1099,6 @@ function MapScreen({ slotA, slotB, hoveredId, hoveredObj, onTap, onHover, onClea
 
       <div className="map-scroll map-svg-wrapper">
         <svg viewBox={`0 0 ${VIEWBOX_W} ${VIEWBOX_H}`} className="map-svg">
-          {/* Tradition lines */}
           {TRAD_ORDER.map(tradId => {
             const list = stations.filter(s => s.tradition === tradId && !s.offsetY)
               .sort((a,b) => a.x - b.x);
@@ -1176,15 +1113,13 @@ function MapScreen({ slotA, slotB, hoveredId, hoveredObj, onTap, onHover, onClea
             );
           })}
 
-          {/* Bridges */}
           {BRIDGES.map((b, i) => (
             <line key={i}
               x1={COL_X[b.col]} y1={ROW_Y[b.fromTrad]}
               x2={COL_X[b.col]} y2={ROW_Y[b.toTrad]}
-              stroke="#2c241f" strokeWidth={2.5} strokeDasharray="5 4" opacity={0.4} />
+              stroke="#14110D" strokeWidth={2.5} strokeDasharray="5 4" opacity={0.4} />
           ))}
 
-          {/* Stations */}
           {stations.map(s => {
             const trad = TRADITIONS[s.tradition];
             const selected = s.id === slotA || s.id === slotB;
@@ -1192,7 +1127,7 @@ function MapScreen({ slotA, slotB, hoveredId, hoveredObj, onTap, onHover, onClea
             const hovered = s.id === hoveredId;
             const isKind = !!s.kind;
             const showPortrait = hasPortrait(s);
-            const portraitR = 22; // portrait radius in SVG units
+            const portraitR = 22;
             const dotR = isKind ? 5 : (s.interchange ? 11 : 7);
             const r = showPortrait ? portraitR : dotR;
             const clipId = `portrait-clip-${s.id}`;
@@ -1210,10 +1145,7 @@ function MapScreen({ slotA, slotB, hoveredId, hoveredObj, onTap, onHover, onClea
                         <circle cx={s.x} cy={s.y} r={portraitR} />
                       </clipPath>
                     </defs>
-                    {/* Cream background under the portrait so failed loads
-                        don't show the SVG default which can render that
-                        broken-image landscape icon in some browsers. */}
-                    <circle cx={s.x} cy={s.y} r={portraitR} fill="#f4efe4" clipPath={`url(#${clipId})`} />
+                    <circle cx={s.x} cy={s.y} r={portraitR} fill="#F5F1E8" clipPath={`url(#${clipId})`} />
                     <image
                       href={portraitURL(s.id)}
                       xlinkHref={portraitURL(s.id)}
@@ -1233,16 +1165,13 @@ function MapScreen({ slotA, slotB, hoveredId, hoveredObj, onTap, onHover, onClea
                       <circle cx={s.x} cy={s.y} r={dotR+5} fill="none" stroke={trad.color} strokeWidth={3} />
                     )}
                     {isKind ? (
-                      // Kind stations (events, ads, instruments, patterns)
-                      // get a small open dot — clearly secondary to portraits
-                      // and to the numbered pattern markers. Reads as italic.
                       <circle cx={s.x} cy={s.y} r={4}
-                        fill="#f4efe4" stroke={trad.color}
+                        fill="#F5F1E8" stroke={trad.color}
                         strokeWidth={1} strokeDasharray="2 1.5" opacity={0.85} />
                     ) : (
                       <circle cx={s.x} cy={s.y} r={dotR}
-                        fill={s.ghost ? "#f4efe4" : "#1a1614"}
-                        stroke={s.ghost ? trad.color : "#1a1614"}
+                        fill={s.ghost ? "#F5F1E8" : "#14110D"}
+                        stroke={s.ghost ? trad.color : "#14110D"}
                         strokeWidth={s.ghost ? 2.5 : 2}
                         strokeDasharray={s.ghost ? "3 2" : undefined} />
                     )}
@@ -1254,26 +1183,26 @@ function MapScreen({ slotA, slotB, hoveredId, hoveredObj, onTap, onHover, onClea
 
                 {selected && (
                   <>
-                    <circle cx={s.x} cy={s.y} r={r+8} fill="none" stroke={trad.color} strokeWidth={2.5} opacity={0.7} />
-                    <rect x={s.x+r+8} y={s.y-9} width={20} height={18} fill={trad.color} rx={2} />
+                    <circle cx={s.x} cy={s.y} r={r+8} fill="none" stroke="#FF4D2E" strokeWidth={3} opacity={0.9} />
+                    <rect x={s.x+r+8} y={s.y-9} width={20} height={18} fill="#FF4D2E" rx={3} />
                     <text x={s.x+r+18} y={s.y+4} fill="#fff"
-                      fontFamily="JetBrains Mono, monospace"
+                      fontFamily="Geist Mono, monospace"
                       fontSize={11} fontWeight={700} textAnchor="middle">{slotLabel}</text>
                   </>
                 )}
 
-                <text x={s.x} y={s.y - r - 8} fill={isKind ? trad.color : "#1a1614"}
-                  fontFamily={isKind ? "Fraunces, serif" : "Plus Jakarta Sans, sans-serif"}
+                <text x={s.x} y={s.y - r - 8} fill={isKind ? trad.color : "#14110D"}
+                  fontFamily={isKind ? "Instrument Serif, serif" : "Geist, sans-serif"}
                   fontSize={isKind ? 12 : 11}
-                  fontWeight={isKind ? 400 : 700}
+                  fontWeight={isKind ? 400 : 600}
                   fontStyle={isKind ? "italic" : "normal"}
                   textAnchor="middle"
-                  letterSpacing={isKind ? 0 : 0.8}
+                  letterSpacing={isKind ? 0 : 0.5}
                   opacity={isKind ? 0.75 : (hovered ? 1 : 0.92)}>
-                  {isKind ? `${s.first} ${s.last}` : (s.last.startsWith('&') ? `${s.first} ${s.last}`.toUpperCase() : s.last.toUpperCase())}
+                  {isKind ? `${s.first} ${s.last}` : (s.last.startsWith('&') ? `${s.first} ${s.last}` : s.last)}
                 </text>
-                <text x={s.x} y={s.y + r + 16} fill="#7a6f63"
-                  fontFamily="JetBrains Mono, monospace"
+                <text x={s.x} y={s.y + r + 16} fill="#8B8576"
+                  fontFamily="Geist Mono, monospace"
                   fontSize={9} textAnchor="middle" letterSpacing={0.5}>
                   {s.year}
                 </text>
@@ -1281,7 +1210,6 @@ function MapScreen({ slotA, slotB, hoveredId, hoveredObj, onTap, onHover, onClea
             );
           })}
 
-          {/* Tradition labels at right */}
           {TRAD_ORDER.map(tradId => {
             const list = stations.filter(s => s.tradition === tradId).sort((a,b)=>a.x-b.x);
             if (list.length === 0) return null;
@@ -1289,8 +1217,8 @@ function MapScreen({ slotA, slotB, hoveredId, hoveredObj, onTap, onHover, onClea
               <text key={`lbl-${tradId}`}
                 x={list[list.length-1].x + 80} y={ROW_Y[tradId]+5}
                 fill={TRADITIONS[tradId].color}
-                fontFamily="Plus Jakarta Sans, sans-serif"
-                fontSize={12} fontWeight={700} letterSpacing={1.2}>
+                fontFamily="Geist Mono, monospace"
+                fontSize={11} fontWeight={600} letterSpacing={1.4}>
                 {TRADITIONS[tradId].label.toUpperCase()}
               </text>
             );
@@ -1299,13 +1227,13 @@ function MapScreen({ slotA, slotB, hoveredId, hoveredObj, onTap, onHover, onClea
       </div>
 
       {hoveredObj && (
-        <div className="map-hover-card" style={{ borderTopColor: TRADITIONS[hoveredObj.tradition].color }}>
+        <div className="map-hover-card" style={{ ['--trad']: TRADITIONS[hoveredObj.tradition].color }}>
           {hasPortrait(hoveredObj) && (
             <img src={portraitURL(hoveredObj.id)} alt=""
               className="map-hover-portrait"
               style={{ borderColor: TRADITIONS[hoveredObj.tradition].color }} />
           )}
-          <div className="map-hover-meta" style={{ color: TRADITIONS[hoveredObj.tradition].color }}>
+          <div className="map-hover-meta">
             {TRADITIONS[hoveredObj.tradition].label} · {hoveredObj.year}
           </div>
           <div className="map-hover-name">
@@ -1324,13 +1252,12 @@ function MapScreen({ slotA, slotB, hoveredId, hoveredObj, onTap, onHover, onClea
 }
 
 // ============================================================
-// COMPOSITION — set the room. Half-second of stillness held.
+// COMPOSITION — fighter-select energy, half-second hold preserved
 // ============================================================
 function CompositionScreen({ slotAObj, slotBObj, topic, setTopic, onBegin, onSwapA, onSwapB, onLeave }) {
   const tradA = slotAObj ? TRADITIONS[slotAObj.tradition] : null;
   const tradB = slotBObj ? TRADITIONS[slotBObj.tradition] : null;
 
-  // Half-second stillness: action elements hold opacity 0 then fade in
   const [actionsReady, setActionsReady] = useState(false);
   useEffect(() => {
     setActionsReady(false);
@@ -1351,43 +1278,43 @@ function CompositionScreen({ slotAObj, slotBObj, topic, setTopic, onBegin, onSwa
   return (
     <section className="composition">
       <div className="composition-room">
-        <div className="composition-figure composition-figure-a" style={{ ['--trad']: tradA.color }}>
-          <button className="composition-figure-btn" onClick={onSwapA} aria-label="Change participant A">
-            {hasPortrait(slotAObj) && (
-              <img src={portraitURL(slotAObj.id)} alt=""
-                className="composition-portrait"
-                style={{ borderColor: tradA.color }} />
-            )}
-            <div className="composition-meta">{tradA.label}</div>
-            <div className="composition-name">
-              <span className="composition-first">{slotAObj.first}</span>
-              <span className="composition-last">{slotAObj.last}</span>
+        <div className="comp-card-wrap comp-card-a">
+          <button className="comp-card" onClick={onSwapA} style={{ ['--trad']: tradA.color }} aria-label="Change participant A">
+            <div className="comp-card-photo">
+              {hasPortrait(slotAObj) && <img src={portraitURL(slotAObj.id)} alt="" />}
             </div>
-            <div className="composition-year">{slotAObj.year}</div>
-            <div className="composition-swap">change</div>
+            <div className="comp-card-meta">
+              <div className="comp-card-trad">{tradA.label}</div>
+              <div className="comp-card-name">
+                <span className="comp-first">{slotAObj.first}</span>
+                <span className="comp-last">{slotAObj.last}</span>
+              </div>
+              <div className="comp-card-year">{slotAObj.year}</div>
+            </div>
+            <div className="comp-card-swap">change</div>
           </button>
           <ConfidenceNote conf={getConfidence(slotAObj)} align="right" />
         </div>
 
-        <div className="composition-divider">
-          <div className="composition-divider-bar" style={{ background:`linear-gradient(to right, ${tradA.color}, ${tradB.color})` }} />
-          <div className="composition-amp">&middot;</div>
+        <div className="composition-vs">
+          <div className="vs-text">VS</div>
+          <div className="vs-bar" style={{ background: `linear-gradient(to right, ${tradA.color}, ${tradB.color})` }}></div>
         </div>
 
-        <div className="composition-figure composition-figure-b" style={{ ['--trad']: tradB.color }}>
-          <button className="composition-figure-btn" onClick={onSwapB} aria-label="Change participant B">
-            {hasPortrait(slotBObj) && (
-              <img src={portraitURL(slotBObj.id)} alt=""
-                className="composition-portrait"
-                style={{ borderColor: tradB.color }} />
-            )}
-            <div className="composition-meta">{tradB.label}</div>
-            <div className="composition-name">
-              <span className="composition-first">{slotBObj.first}</span>
-              <span className="composition-last">{slotBObj.last}</span>
+        <div className="comp-card-wrap comp-card-b">
+          <button className="comp-card" onClick={onSwapB} style={{ ['--trad']: tradB.color }} aria-label="Change participant B">
+            <div className="comp-card-photo">
+              {hasPortrait(slotBObj) && <img src={portraitURL(slotBObj.id)} alt="" />}
             </div>
-            <div className="composition-year">{slotBObj.year}</div>
-            <div className="composition-swap">change</div>
+            <div className="comp-card-meta">
+              <div className="comp-card-trad">{tradB.label}</div>
+              <div className="comp-card-name">
+                <span className="comp-first">{slotBObj.first}</span>
+                <span className="comp-last">{slotBObj.last}</span>
+              </div>
+              <div className="comp-card-year">{slotBObj.year}</div>
+            </div>
+            <div className="comp-card-swap">change</div>
           </button>
           <ConfidenceNote conf={getConfidence(slotBObj)} align="left" />
         </div>
@@ -1421,7 +1348,7 @@ function CompositionScreen({ slotAObj, slotBObj, topic, setTopic, onBegin, onSwa
 }
 
 // ============================================================
-// EXCHANGE — the conversation. Turns arrive in time.
+// EXCHANGE — turns arrive in time, controls as game actions
 // ============================================================
 function ExchangeScreen({
   slotAObj, slotBObj, exchange, visibleTurns, loadingText, error,
@@ -1432,7 +1359,6 @@ function ExchangeScreen({
   const tradA = slotAObj ? TRADITIONS[slotAObj.tradition] : null;
   const tradB = slotBObj ? TRADITIONS[slotBObj.tradition] : null;
 
-  // Determine the speaker of the most recent revealed turn (for dimming)
   const allTurnsRevealed = exchange && visibleTurns >= exchange.turns.length;
   const lastRevealed = exchange && visibleTurns > 0 ? exchange.turns[visibleTurns-1] : null;
   const lastSpeakerId = lastRevealed ? lastRevealed.speaker : null;
@@ -1440,7 +1366,6 @@ function ExchangeScreen({
   const dimB = !!lastSpeakerId && lastSpeakerId !== "B" && lastSpeakerId !== "host" && !allTurnsRevealed;
 
   const transcriptRef = useRef(null);
-  // Auto-scroll latest turn into view
   useEffect(() => {
     if (transcriptRef.current && visibleTurns > 0) {
       const last = transcriptRef.current.querySelector('.turn:last-child');
@@ -1459,7 +1384,7 @@ function ExchangeScreen({
           {exchange?.topic ? (
             <div className="exchange-topic-text">{exchange.topic}</div>
           ) : (
-            <div className="exchange-topic-text exchange-topic-pending">&middot;&middot;&middot;</div>
+            <div className="exchange-topic-text exchange-topic-pending">···</div>
           )}
         </div>
         <ParticipantLine thinker={slotBObj} trad={tradB} dim={dimB} align="right" />
@@ -1625,20 +1550,13 @@ function MobileMapList({ slotA, slotB, onTap }) {
                       onClick={() => onTap(t.id)}
                       disabled={!!t.kind}
                       className="map-list-btn"
-                      style={selected ? { background: trad.color, color: "#fff" } : {}}
+                      style={selected ? { background: "#FF4D2E", color: "#fff" } : {}}
                     >
                       {portrait && (
-                        <img
-                          src={portraitURL(t.id)}
-                          alt=""
-                          className="map-list-portrait"
-                          style={{ borderColor: trad.color }}
-                        />
+                        <img src={portraitURL(t.id)} alt="" className="map-list-portrait" style={{ borderColor: trad.color }} />
                       )}
                       <div className="map-list-name">
-                        {t.kind
-                          ? <em>{t.first} {t.last}</em>
-                          : <strong>{t.first} {t.last}</strong>}
+                        {t.kind ? <em>{t.first} {t.last}</em> : <strong>{t.first} {t.last}</strong>}
                       </div>
                       <div className="map-list-meta">
                         <span>{t.year}</span>
@@ -1666,12 +1584,7 @@ function ParticipantLine({ thinker, trad, dim, align }) {
   return (
     <div className={`participant ${dim ? "is-dim" : ""} part-${align}`} style={{ ['--trad']: trad.color, textAlign: align }}>
       {portrait && (
-        <img
-          src={portraitURL(thinker.id)}
-          alt=""
-          className="participant-portrait"
-          style={{ borderColor: trad.color }}
-        />
+        <img src={portraitURL(thinker.id)} alt="" className="participant-portrait" style={{ borderColor: trad.color }} />
       )}
       <div className="participant-meta">{trad.label}</div>
       <div className="participant-name">
@@ -1690,15 +1603,10 @@ function Turn({ turn, speaker, trad }) {
     <article className={`turn ${isA ? "turn-a" : "turn-b"}`} style={{ ['--trad']: trad.color }}>
       <header className="turn-header">
         {portrait && (
-          <img
-            src={portraitURL(speaker.id)}
-            alt=""
-            className="turn-portrait"
-            style={{ borderColor: trad.color }}
-          />
+          <img src={portraitURL(speaker.id)} alt="" className="turn-portrait" style={{ borderColor: trad.color }} />
         )}
         <span className="turn-name">{speaker.last}</span>
-        <span className="turn-meta">{speaker.year} &middot; {trad.label}</span>
+        <span className="turn-meta">{speaker.year} · {trad.label}</span>
       </header>
       <p className="turn-body">{turn.text}</p>
     </article>
@@ -1706,15 +1614,13 @@ function Turn({ turn, speaker, trad }) {
 }
 
 // ============================================================
-// REPORT CARD — appears after each exchange. Two scores, one move,
-// open ground for both. Editorial register, real visualisation,
-// no celebration. Reads like a chess match score sheet.
+// REPORT CARD — UNCHANGED. Editorial register preserved.
 // ============================================================
 function ReportCard({ card, loading, slotAObj, slotBObj, tradA, tradB, roundCount, priorRoomScore, turns }) {
   if (loading) {
     return (
       <div className="report-card report-card-loading">
-        <div className="report-card-label">Scoring the exchange&hellip;</div>
+        <div className="report-card-label">Scoring the exchange…</div>
       </div>
     );
   }
@@ -1732,7 +1638,7 @@ function ReportCard({ card, loading, slotAObj, slotBObj, tradA, tradB, roundCoun
     <section className="report-card" aria-label="Report card">
       <header className="report-card-head">
         <div className="report-card-label">
-          {roundCount > 1 ? `Round ${roundCount} \u00b7 Report card` : "Report card"}
+          {roundCount > 1 ? `Round ${roundCount} · Report card` : "Report card"}
         </div>
         {delta !== null && (
           <div className={`report-card-delta ${delta > 0 ? "is-up" : delta < 0 ? "is-down" : "is-flat"}`}>
@@ -1742,7 +1648,6 @@ function ReportCard({ card, loading, slotAObj, slotBObj, tradA, tradB, roundCoun
       </header>
 
       <div className="report-card-body">
-        {/* Room Score with radar */}
         <div className="report-block report-block-room">
           <div className="report-block-label">Room Score</div>
           <div className="report-room-score-row">
@@ -1752,7 +1657,6 @@ function ReportCard({ card, loading, slotAObj, slotBObj, tradA, tradB, roundCoun
           {card.roomNote && <p className="report-block-note">{card.roomNote}</p>}
         </div>
 
-        {/* Voice Fidelity bars */}
         <div className="report-block report-block-fidelity">
           <div className="report-block-label">Voice Fidelity</div>
           <FidelityBar thinker={slotAObj} trad={tradA} score={card.voiceFidelityA} note={card.voiceNoteA} />
@@ -1760,13 +1664,12 @@ function ReportCard({ card, loading, slotAObj, slotBObj, tradA, tradB, roundCoun
         </div>
       </div>
 
-      {/* Move of the round */}
       {card.moveOfRound && (
         <div className="report-move">
           <div className="report-block-label">Move of the round</div>
           {card.moveOfRound.quote && (
             <blockquote className="report-move-quote" style={moveTrad ? { borderLeftColor: moveTrad.color } : {}}>
-              &ldquo;{card.moveOfRound.quote}&rdquo;
+              "{card.moveOfRound.quote}"
             </blockquote>
           )}
           <div className="report-move-credit">
@@ -1778,12 +1681,11 @@ function ReportCard({ card, loading, slotAObj, slotBObj, tradA, tradB, roundCoun
                 {moveTurnIdx !== null && <span>, turn {card.moveOfRound.turnIndex}</span>}
               </>
             ) : null}
-            {card.moveOfRound.reason && <em> &mdash; {card.moveOfRound.reason}</em>}
+            {card.moveOfRound.reason && <em> — {card.moveOfRound.reason}</em>}
           </div>
         </div>
       )}
 
-      {/* Open ground */}
       {(card.openGroundA || card.openGroundB) && (
         <div className="report-open">
           <div className="report-block-label">Open ground</div>
@@ -1807,7 +1709,6 @@ function ReportCard({ card, loading, slotAObj, slotBObj, tradA, tradB, roundCoun
   );
 }
 
-// Small radar chart for the five rubric dimensions, 0-20 each.
 function RadarChart({ rubric }) {
   if (!rubric) return null;
   const dims = [
@@ -1824,7 +1725,6 @@ function RadarChart({ rubric }) {
   const max = 20;
   const angle = (i) => (Math.PI * 2 * i) / dims.length - Math.PI / 2;
 
-  // Concentric grid rings at 5, 10, 15, 20
   const rings = [5, 10, 15, 20].map(level => {
     const r = (level / max) * maxR;
     const points = dims.map((_, i) =>
@@ -1833,20 +1733,17 @@ function RadarChart({ rubric }) {
     return points;
   });
 
-  // Axis lines
   const axes = dims.map((_, i) => ({
     x: cx + maxR * Math.cos(angle(i)),
     y: cy + maxR * Math.sin(angle(i)),
   }));
 
-  // Data polygon
   const dataPoints = dims.map((d, i) => {
     const v = Math.max(0, Math.min(max, rubric[d.key] || 0));
     const r = (v / max) * maxR;
     return `${cx + r * Math.cos(angle(i))},${cy + r * Math.sin(angle(i))}`;
   }).join(" ");
 
-  // Labels just outside the chart
   const labels = dims.map((d, i) => {
     const r = maxR + 14;
     return {
@@ -1859,22 +1756,18 @@ function RadarChart({ rubric }) {
 
   return (
     <svg className="report-radar" viewBox={`0 0 ${size} ${size}`} width={size} height={size}>
-      {/* grid rings */}
       {rings.map((points, i) => (
         <polygon key={i} points={points}
           fill="none" stroke="#d8cfbf" strokeWidth="1"
           opacity={i === 3 ? 0.7 : 0.35} />
       ))}
-      {/* axes */}
       {axes.map((a, i) => (
         <line key={i} x1={cx} y1={cy} x2={a.x} y2={a.y}
           stroke="#d8cfbf" strokeWidth="1" opacity="0.5" />
       ))}
-      {/* data polygon */}
       <polygon points={dataPoints}
         fill="#1a1614" fillOpacity="0.08"
         stroke="#1a1614" strokeWidth="1.5" />
-      {/* data points */}
       {dims.map((d, i) => {
         const v = Math.max(0, Math.min(max, rubric[d.key] || 0));
         const r = (v / max) * maxR;
@@ -1885,7 +1778,6 @@ function RadarChart({ rubric }) {
             r="2.5" fill="#1a1614" />
         );
       })}
-      {/* labels */}
       {labels.map((l, i) => (
         <g key={i}>
           <text x={l.x} y={l.y} fill="#7a6f63"
@@ -1913,9 +1805,7 @@ function FidelityBar({ thinker, trad, score, note }) {
     <div className="fidelity-bar">
       <div className="fidelity-bar-head">
         {hasPortrait(thinker) && (
-          <img src={portraitURL(thinker.id)} alt=""
-            className="fidelity-bar-portrait"
-            style={{ borderColor: trad.color }} />
+          <img src={portraitURL(thinker.id)} alt="" className="fidelity-bar-portrait" style={{ borderColor: trad.color }} />
         )}
         <div className="fidelity-bar-meta">
           <div className="fidelity-bar-name">{thinker.last}</div>
@@ -1924,8 +1814,7 @@ function FidelityBar({ thinker, trad, score, note }) {
         <div className="fidelity-bar-score">{score}</div>
       </div>
       <div className="fidelity-bar-track">
-        <div className="fidelity-bar-fill"
-          style={{ width: `${pct}%`, background: trad.color }} />
+        <div className="fidelity-bar-fill" style={{ width: `${pct}%`, background: trad.color }} />
       </div>
     </div>
   );
@@ -1941,312 +1830,480 @@ function HostTurn({ text, target }) {
 }
 
 // ============================================================
-// GLOBAL STYLE
+// GLOBAL STYLE — playful direction throughout
 // ============================================================
 function GlobalStyle() {
   return (
     <style>{`
-      @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400;1,9..144,500&family=Plus+Jakarta+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
       *, *::before, *::after { box-sizing: border-box; }
       body { margin: 0; }
 
       .aoa-root {
-        --bg: #f4efe4;
-        --bg-warm: #faf6ed;
-        --paper: #fdfaf2;
-        --ink: #1a1614;
-        --ink-quiet: #4a423b;
-        --mid: #7a6f63;
-        --whisper: #b5a89a;
-        --rule: rgba(26,22,20,0.12);
+        --bg: #F5F1E8;
+        --bg-warm: #F8F4EC;
+        --paper: #FBF8F1;
+        --ink: #14110D;
+        --ink-quiet: #4A463D;
+        --mid: #6B6659;
+        --whisper: #8B8576;
+        --rule: rgba(20,17,13,0.12);
+        --rule-strong: rgba(20,17,13,0.28);
+        --accent: #FF4D2E;
+        --accent-yellow: #F5D547;
+        --accent-blue: #2D5BFF;
+        --card-shadow: rgba(20, 17, 13, 0.18);
         background: var(--bg);
         color: var(--ink);
         min-height: 100vh;
-        font-family: 'Fraunces', Georgia, serif;
-        font-feature-settings: "ss01", "onum";
-        font-variant-numeric: oldstyle-nums;
+        font-family: 'Geist', system-ui, sans-serif;
+        background-image:
+          radial-gradient(circle at 12% 20%, rgba(255, 77, 46, 0.04) 0%, transparent 40%),
+          radial-gradient(circle at 88% 60%, rgba(45, 91, 255, 0.04) 0%, transparent 45%);
       }
+
+      @keyframes pulse {
+        0%, 100% { transform: scale(1); opacity: 1; }
+        50% { transform: scale(1.3); opacity: 0.55; }
+      }
+      @keyframes liveDot {
+        0%, 100% { transform: scale(1); opacity: 1; }
+        50% { transform: scale(1.4); opacity: 0.5; }
+      }
+      @keyframes fadeUp {
+        from { opacity: 0; transform: translateY(8px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
       /* ---- Shell ---- */
       .aoa-header {
-        display: flex; align-items: baseline; justify-content: space-between;
-        padding: 22px 40px; border-bottom: 1px solid var(--rule);
-        position: sticky; top: 0; background: var(--bg); z-index: 10;
-        backdrop-filter: blur(6px);
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 18px 32px;
+        position: sticky; top: 0; z-index: 50;
+        background: rgba(245, 241, 232, 0.85);
+        backdrop-filter: blur(10px);
+        border-bottom: 1px solid var(--rule);
       }
       .aoa-wordmark {
         background: none; border: none; padding: 0; cursor: pointer;
-        font-family: 'Fraunces', serif; font-size: 17px; font-weight: 500;
-        color: var(--ink); font-variation-settings: "opsz" 24;
-        letter-spacing: -0.005em;
+        display: flex; align-items: center; gap: 10px;
+        font-family: 'Geist Mono', monospace;
+        font-size: 11px; font-weight: 600;
+        letter-spacing: 0.14em; text-transform: uppercase;
+        color: var(--ink);
       }
-      .aoa-wordmark-the {
-        font-style: italic; font-weight: 400; color: var(--mid); margin-right: 4px;
+      .aoa-pulse {
+        width: 9px; height: 9px;
+        background: var(--accent);
+        border-radius: 50%;
+        animation: pulse 2.4s ease-in-out infinite;
       }
       .aoa-nav { display: flex; gap: 22px; }
       .aoa-link {
         background: none; border: none; padding: 0; cursor: pointer;
-        font-family: 'Fraunces', serif; font-size: 14px; font-style: italic;
-        color: var(--mid); transition: color 0.2s;
+        font-family: 'Geist Mono', monospace;
+        font-size: 11px; font-weight: 500;
+        letter-spacing: 0.14em; text-transform: uppercase;
+        color: var(--mid);
+        transition: color 0.15s;
       }
       .aoa-link:hover { color: var(--ink); }
-      .aoa-link-quiet { font-size: 13px; color: var(--mid); }
+      .aoa-link-quiet { font-size: 11px; color: var(--mid); }
       .aoa-main { padding: 0; }
 
-      /* ---- Arrival ---- */
+      /* ---- Live dot reused across screens ---- */
+      .live-dot {
+        display: inline-block;
+        width: 6px; height: 6px;
+        background: var(--accent);
+        border-radius: 50%;
+        animation: liveDot 1.8s ease-in-out infinite;
+      }
+
+      /* ---- ARRIVAL ---- */
       .arrival {
         position: relative;
-        min-height: calc(100vh - 70px);
-        padding: 60px 6vw 200px;
-        overflow: hidden;
-        display: flex;
-        align-items: center;
+        padding: 0;
+      }
+      .arrival-hero {
+        padding: 60px 36px 24px;
+        text-align: center;
+        position: relative;
+        animation: fadeIn 0.8s ease both;
+      }
+      .pre-headline {
+        font-family: 'Geist Mono', monospace;
+        font-size: 12px; font-weight: 500;
+        letter-spacing: 0.18em; text-transform: uppercase;
+        color: var(--ink-quiet);
+        margin-bottom: 28px;
+        display: inline-flex; align-items: center; gap: 12px;
       }
 
-      /* Pinned full-bleed Algonquin behind everything */
-      .arrival-salon .arrival-bg {
-        position: absolute;
-        top: 0; left: 0; right: 0; bottom: 0;
-        background-image: url("./assets/algonquin.svg");
-        background-repeat: no-repeat;
-        background-position: center center;
-        background-size: cover;
-        opacity: 0.18;
-        pointer-events: none;
-        z-index: 0;
-        animation: bgFade 2.4s ease 0.2s both;
+      .big-headline {
+        font-family: 'Instrument Serif', serif;
+        font-size: clamp(76px, 14vw, 200px);
+        font-weight: 400;
+        line-height: 0.88;
+        letter-spacing: -0.04em;
+        margin: 0 auto;
+        display: inline-block;
+        position: relative;
       }
-      @keyframes bgFade {
-        from { opacity: 0; }
-        to { opacity: 0.18; }
+      .bh-word {
+        display: inline-block;
+        transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
       }
-
-      /* Cream wash so copy reads on top of illustration */
-      .arrival-salon::before {
+      .big-headline:hover .bh-word:nth-child(1) { transform: rotate(-2deg) translateY(-4px); }
+      .big-headline:hover .bh-fight {
+        transform: rotate(3deg) translateY(-2px);
+      }
+      .bh-fight {
+        font-style: italic;
+        color: var(--accent);
+        position: relative;
+      }
+      .bh-fight::after {
         content: "";
         position: absolute;
-        top: 0; left: 0; right: 0; bottom: 0;
-        background: radial-gradient(
-          ellipse at left center,
-          rgba(244, 239, 228, 0.94) 0%,
-          rgba(244, 239, 228, 0.65) 55%,
-          rgba(244, 239, 228, 0.35) 100%
-        );
-        pointer-events: none;
-        z-index: 1;
+        bottom: 0.05em;
+        left: -0.02em;
+        right: -0.02em;
+        height: 0.2em;
+        background: var(--accent-yellow);
+        z-index: -1;
+        transform: skew(-8deg);
       }
 
-      .arrival-inner {
-        position: relative;
-        z-index: 2;
-        max-width: 720px;
-        animation: arrivalFade 1.2s ease 0.15s both;
-      }
-      @keyframes arrivalFade { from { opacity: 0; } to { opacity: 1; } }
-      @keyframes pairFade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
-
-      .arrival-title {
-        font-family: 'Fraunces', serif;
-        font-size: clamp(38px, 5vw, 64px);
-        font-weight: 500;
-        font-variation-settings: "opsz" 144;
-        letter-spacing: -0.03em;
-        line-height: 1.0;
-        color: var(--ink);
-        margin: 0 0 14px;
-      }
-
-      .arrival-tag {
-        font-family: 'Fraunces', serif;
-        font-size: clamp(17px, 1.4vw, 20px);
-        color: var(--mid);
-        margin: 0 0 36px;
-        font-variation-settings: "opsz" 22;
-        opacity: 0;
-        animation: pairFade 0.8s ease 0.3s both;
-      }
-      .arrival-tag em { font-style: italic; }
-
-      .arrival-prose {
-        font-family: 'Fraunces', serif;
-        font-size: clamp(17px, 1.3vw, 19px);
-        line-height: 1.65;
+      .big-deck {
+        font-family: 'Geist', sans-serif;
+        font-size: clamp(15px, 1.6vw, 18px);
+        font-weight: 400;
+        line-height: 1.5;
         color: var(--ink-quiet);
-        font-variation-settings: "opsz" 20;
-        max-width: 60ch;
-        margin: 0 0 40px;
+        max-width: 52ch;
+        margin: 36px auto 0;
       }
-      .arrival-prose p {
-        margin: 0 0 16px;
-        opacity: 0;
-        animation: pairFade 0.8s ease both;
-      }
-      .arrival-prose > *:nth-child(1) { animation-delay: 0.45s; }
-      .arrival-prose > *:nth-child(2) { animation-delay: 0.6s; }
-      .arrival-prose > *:nth-child(3) { animation-delay: 0.75s; }
-      .arrival-prose > *:nth-child(4) { animation-delay: 0.9s; }
-      .arrival-prose > *:nth-child(5) { animation-delay: 1.0s; }
-      .arrival-prose > *:nth-child(6) { animation-delay: 1.1s; }
-      .arrival-prose > *:nth-child(7) { animation-delay: 1.2s; }
-      .arrival-prose > *:nth-child(8) { animation-delay: 1.3s; }
-      .arrival-prose > *:nth-child(9) { animation-delay: 1.4s; }
-      .arrival-prose > *:nth-child(10) { animation-delay: 1.5s; }
-      .arrival-prose > *:nth-child(11) { animation-delay: 1.6s; }
-      .arrival-prose > *:nth-child(12) { animation-delay: 1.7s; }
-      .arrival-prose > *:nth-child(n+13) { animation-delay: 1.8s; }
+      .big-deck strong { color: var(--ink); font-weight: 600; }
 
-      .arrival-section-head {
-        font-family: 'Fraunces', serif;
-        font-style: italic;
-        font-weight: 500;
-        font-size: clamp(18px, 1.5vw, 22px);
+      .mechanics {
+        display: flex; justify-content: center; flex-wrap: wrap;
+        gap: 10px; margin-top: 36px;
+      }
+      .chip {
+        display: inline-flex; align-items: center; gap: 8px;
+        background: var(--bg);
+        border: 1.5px solid var(--ink);
+        padding: 8px 14px;
+        border-radius: 100px;
+        font-family: 'Geist Mono', monospace;
+        font-size: 11px; font-weight: 600;
+        letter-spacing: 0.06em; text-transform: uppercase;
         color: var(--ink);
-        margin: 26px 0 8px;
-        font-variation-settings: "opsz" 24;
-        opacity: 0;
-        animation: pairFade 0.8s ease both;
+        box-shadow: 2px 2px 0 var(--ink);
+        transition: transform 0.15s, box-shadow 0.15s;
       }
-
-      .arrival-bullets {
-        list-style: none;
-        padding: 0;
-        margin: 0 0 16px;
+      .chip:hover {
+        transform: translate(-1px, -1px);
+        box-shadow: 3px 3px 0 var(--ink);
       }
-      .arrival-bullets li {
-        position: relative;
-        padding-left: 22px;
-        margin: 0 0 8px;
-        opacity: 0;
-        animation: pairFade 0.8s ease both;
-      }
-      .arrival-bullets li::before {
-        content: "·";
-        position: absolute;
-        left: 6px;
-        top: 0;
-        font-size: 1.4em;
-        color: var(--whisper);
-        line-height: 1;
-      }
-      .arrival-bullets em { font-style: italic; color: var(--ink); }
-
-      .arrival-walk-in {
-        background: var(--ink);
-        color: var(--paper);
-        border: none;
-        padding: 20px 32px;
-        font-family: 'Fraunces', serif;
-        font-size: 20px;
-        font-variation-settings: "opsz" 28;
-        letter-spacing: -0.01em;
-        cursor: pointer;
-        display: inline-flex;
-        align-items: center;
-        gap: 14px;
-        transition: gap 0.3s ease, background 0.3s ease;
-        opacity: 0;
-        animation: pairFade 0.9s ease 1.6s both;
-      }
-      .arrival-walk-in:hover {
-        gap: 22px;
-        background: #2d251f;
-      }
-      .arrival-walk-in-arrow {
-        font-size: 20px;
-        transition: transform 0.3s ease;
-      }
-      .arrival-walk-in:hover .arrival-walk-in-arrow {
-        transform: translateX(4px);
-      }
-
-      .arrival-quiet-link {
-        display: block;
-        background: none; border: none;
-        margin-top: 20px;
-        padding: 6px 0;
-        font-family: 'Fraunces', serif;
-        font-style: italic;
-        font-size: 15px;
-        color: var(--mid);
-        cursor: pointer;
-        font-variation-settings: "opsz" 18;
-        opacity: 0;
-        animation: pairFade 0.9s ease 1.8s both;
-        transition: color 0.2s;
-      }
-      .arrival-quiet-link:hover { color: var(--ink); }
-
-      /* MARQUEE — pinned at bottom */
-      .arrival-marquee {
-        position: absolute;
-        bottom: 32px;
-        left: 0; right: 0;
-        z-index: 3;
-        overflow: hidden;
-        mask-image: linear-gradient(to right, transparent 0%, black 6%, black 94%, transparent 100%);
-        -webkit-mask-image: linear-gradient(to right, transparent 0%, black 6%, black 94%, transparent 100%);
-        opacity: 0;
-        animation: pairFade 1.2s ease 2.0s both;
-      }
-      .arrival-marquee-track {
-        display: flex;
-        gap: 32px;
-        width: max-content;
-        animation: marqueeScroll 110s linear infinite;
-      }
-      @keyframes marqueeScroll {
-        from { transform: translateX(0); }
-        to { transform: translateX(-50%); }
-      }
-      .arrival-marquee:hover .arrival-marquee-track {
-        animation-play-state: paused;
-      }
-      .arrival-marquee-item {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 8px;
-        flex-shrink: 0;
-      }
-      .arrival-marquee-portrait {
-        width: 64px; height: 64px;
+      .chip .num {
+        width: 18px; height: 18px;
+        background: var(--ink); color: var(--bg);
         border-radius: 50%;
-        border: 2px solid;
-        background: var(--paper);
-        overflow: hidden;
-        display: flex; align-items: center; justify-content: center;
+        display: inline-flex; align-items: center; justify-content: center;
+        font-size: 10px; font-weight: 700;
+        margin-left: -4px;
       }
-      .arrival-marquee-portrait img {
+
+      .scrawl {
+        position: absolute;
+        font-family: 'Instrument Serif', serif;
+        font-style: italic;
+        color: var(--accent);
+        font-size: 18px;
+        pointer-events: none;
+        user-select: none;
+      }
+      .scrawl-1 { top: 130px; right: 8%; transform: rotate(-8deg); }
+      .scrawl-2 {
+        bottom: 24px; left: 5%;
+        transform: rotate(6deg);
+        color: var(--accent-blue);
+        position: relative;
+      }
+      .scr-arrow { display: inline-block; margin-right: 4px; }
+
+      /* ---- Cast roster ---- */
+      .cast-section {
+        padding: 64px 36px 32px;
+        position: relative;
+      }
+      .cast-header {
+        display: flex; justify-content: space-between; align-items: baseline;
+        margin-bottom: 24px;
+        font-family: 'Geist Mono', monospace;
+        font-size: 11px; font-weight: 500;
+        letter-spacing: 0.14em; text-transform: uppercase;
+        color: var(--whisper);
+        max-width: 1280px;
+        margin-left: auto; margin-right: auto;
+        flex-wrap: wrap; gap: 8px;
+      }
+      .cast-label { color: var(--ink); font-weight: 600; }
+      .cast-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(108px, 1fr));
+        gap: 12px;
+        max-width: 1280px;
+        margin: 0 auto;
+      }
+      .card {
+        aspect-ratio: 3 / 4;
+        background: var(--bg);
+        border: 1.5px solid var(--ink);
+        border-radius: 6px;
+        padding: 0;
+        cursor: pointer;
+        position: relative;
+        overflow: hidden;
+        transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.18s;
+        box-shadow: 3px 3px 0 var(--ink);
+        display: flex; flex-direction: column;
+        font-family: inherit;
+        color: var(--ink);
+        text-align: left;
+      }
+      .card:hover {
+        transform: translate(-2px, -3px) rotate(-1deg);
+        box-shadow: 5px 6px 0 var(--ink);
+        z-index: 2;
+      }
+      .card:nth-child(odd):hover { transform: translate(-2px, -3px) rotate(1deg); }
+      .card-photo {
+        height: 70%;
+        background: linear-gradient(160deg, #C9A878 0%, #6B5640 100%);
+        border-bottom: 1.5px solid var(--ink);
+        display: flex; align-items: center; justify-content: center;
+        position: relative;
+        overflow: hidden;
+      }
+      .card:nth-child(2n) .card-photo { background: linear-gradient(160deg, #B89878 0%, #4A3D2E 100%); }
+      .card:nth-child(3n) .card-photo { background: linear-gradient(160deg, #D4B898 0%, #7A6248 100%); }
+      .card:nth-child(4n) .card-photo { background: linear-gradient(160deg, #A89478 0%, #5C4A38 100%); }
+      .card:nth-child(5n) .card-photo { background: linear-gradient(160deg, #C2A888 0%, #6B5440 100%); }
+      .card:nth-child(7n) .card-photo { background: linear-gradient(160deg, #E0C8A4 0%, #826A50 100%); }
+      .card:nth-child(11n) .card-photo { background: linear-gradient(160deg, #9C8568 0%, #4A3D2E 100%); }
+      .card-photo img {
         width: 100%; height: 100%;
         object-fit: cover;
         display: block;
+        position: relative; z-index: 1;
       }
-      .arrival-marquee-name {
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 9px;
-        letter-spacing: 0.12em;
-        text-transform: uppercase;
+      .card-initial {
+        font-family: 'Instrument Serif', serif;
+        font-style: italic;
+        font-size: 36px;
+        color: rgba(245, 241, 232, 0.7);
+      }
+      .card-meta {
+        height: 30%;
+        padding: 8px 10px;
+        display: flex; flex-direction: column;
+        justify-content: center;
+        background: var(--bg);
+      }
+      .card-name {
+        font-family: 'Geist', sans-serif;
+        font-size: 13px; font-weight: 600;
+        color: var(--ink);
+        line-height: 1.1;
+        letter-spacing: -0.01em;
+      }
+      .card-year {
+        font-family: 'Geist Mono', monospace;
+        font-size: 10px; font-weight: 500;
+        color: var(--whisper);
+        margin-top: 3px;
+        letter-spacing: 0.04em;
+      }
+      .card-badge {
+        position: absolute;
+        top: 6px; right: 6px;
+        background: var(--accent); color: var(--bg);
+        font-family: 'Geist Mono', monospace;
+        font-size: 9px; font-weight: 700;
+        padding: 2px 6px;
+        border-radius: 3px;
+        letter-spacing: 0.05em;
+        z-index: 2;
+      }
+
+      /* ---- CTA ---- */
+      .arrival-cta {
+        padding: 56px 36px 80px;
+        text-align: center;
+      }
+      .walk-in {
+        background: var(--ink);
+        color: var(--bg);
+        border: 2px solid var(--ink);
+        padding: 18px 36px;
+        font-family: 'Geist', sans-serif;
+        font-size: 16px; font-weight: 600;
+        letter-spacing: -0.01em;
+        cursor: pointer;
+        border-radius: 100px;
+        box-shadow: 4px 4px 0 var(--accent);
+        transition: transform 0.15s, box-shadow 0.15s, background 0.15s;
+        display: inline-flex; align-items: center; gap: 10px;
+      }
+      .walk-in:hover {
+        transform: translate(-2px, -2px);
+        box-shadow: 6px 6px 0 var(--accent);
+        background: var(--ink-quiet);
+      }
+      .walk-in:active {
+        transform: translate(2px, 2px);
+        box-shadow: 1px 1px 0 var(--accent);
+      }
+      .walk-arrow { font-size: 18px; transition: transform 0.15s; }
+      .walk-in:hover .walk-arrow { transform: translateX(3px); }
+
+      .cta-aside {
+        margin-top: 22px;
+        font-family: 'Geist Mono', monospace;
+        font-size: 11px;
+        letter-spacing: 0.1em; text-transform: uppercase;
+        color: var(--whisper);
+      }
+      .cta-aside .sep { margin: 0 10px; }
+
+      @media (max-width: 768px) {
+        .arrival-hero { padding: 40px 20px 20px; }
+        .cast-section { padding: 40px 20px 24px; }
+        .arrival-cta { padding: 40px 20px 60px; }
+        .cast-grid { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
+        .scrawl { display: none; }
+      }
+
+      /* ---- MAP ---- */
+      .map-screen { padding: 32px 36px 120px; }
+      .map-prelude {
+        display: flex; align-items: center; justify-content: space-between;
+        max-width: 1280px; margin: 0 auto 28px;
+        gap: 16px; flex-wrap: wrap;
+      }
+      .map-prelude-pill {
+        display: inline-flex; align-items: center; gap: 10px;
+        background: var(--paper);
+        border: 1.5px solid var(--ink);
+        padding: 8px 16px;
+        border-radius: 100px;
+        font-family: 'Geist Mono', monospace;
+        font-size: 11px; font-weight: 500;
+        letter-spacing: 0.12em; text-transform: uppercase;
+        color: var(--ink);
+        box-shadow: 2px 2px 0 var(--ink);
+      }
+      .map-clear-btn {
+        background: none; border: none; padding: 6px 12px;
+        cursor: pointer;
+        font-family: 'Geist Mono', monospace;
+        font-size: 11px; font-weight: 500;
+        letter-spacing: 0.12em; text-transform: uppercase;
+        color: var(--mid);
+        transition: color 0.15s;
+      }
+      .map-clear-btn:hover { color: var(--accent); }
+
+      .map-begin-bar {
+        position: fixed;
+        bottom: 0; left: 0; right: 0;
+        z-index: 40;
+        padding: 24px 36px 36px;
+        background: linear-gradient(to top, var(--bg) 60%, rgba(245,241,232,0));
+        display: flex; justify-content: center;
+        animation: fadeUp 0.5s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+      }
+      .map-begin-btn {
+        background: var(--ink);
+        color: var(--bg);
+        border: 2px solid var(--ink);
+        padding: 18px 44px;
+        font-family: 'Geist', sans-serif;
+        font-size: 17px; font-weight: 600;
+        letter-spacing: -0.01em;
+        cursor: pointer;
+        border-radius: 100px;
+        display: inline-flex; align-items: center; gap: 12px;
+        box-shadow: 4px 4px 0 var(--accent);
+        transition: transform 0.15s, box-shadow 0.15s;
+      }
+      .map-begin-btn:hover {
+        transform: translate(-2px, -2px);
+        box-shadow: 6px 6px 0 var(--accent);
+      }
+      .map-begin-arrow { font-size: 18px; transition: transform 0.15s; }
+      .map-begin-btn:hover .map-begin-arrow { transform: translateX(3px); }
+
+      .map-scroll { overflow-x: auto; padding-bottom: 24px; animation: fadeIn 0.6s ease both; }
+      .map-scroll::-webkit-scrollbar { height: 8px; }
+      .map-scroll::-webkit-scrollbar-thumb { background: rgba(20,17,13,0.18); border-radius: 4px; }
+      .map-svg { width: ${VIEWBOX_W}px; min-width: 1200px; height: auto; display: block; }
+
+      .map-hover-card {
+        position: fixed; top: 88px; right: 28px; width: 320px;
+        background: var(--paper);
+        border: 1.5px solid var(--ink);
+        border-top: 4px solid var(--trad);
+        border-radius: 6px;
+        padding: 22px 24px;
+        z-index: 50;
+        box-shadow: 4px 4px 0 var(--ink);
+        animation: fadeIn 0.2s ease both;
+      }
+      .map-hover-portrait {
+        width: 80px; height: 80px;
+        border-radius: 50%;
+        border: 3px solid;
+        object-fit: cover;
+        margin-bottom: 14px;
+        background: var(--bg);
+      }
+      .map-hover-meta {
+        font-family: 'Geist Mono', monospace;
+        font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase;
+        color: var(--trad);
+        margin-bottom: 6px;
+      }
+      .map-hover-name {
+        font-family: 'Instrument Serif', serif;
+        font-size: 28px; font-weight: 400;
+        line-height: 1.0;
+        margin-bottom: 12px;
+        letter-spacing: -0.02em;
+      }
+      .map-hover-bio {
+        font-family: 'Geist', sans-serif;
+        font-size: 13px; line-height: 1.55;
+        color: var(--ink-quiet);
+        margin: 0;
+      }
+      .map-hover-note {
+        margin-top: 14px; padding-top: 12px;
+        border-top: 1px solid var(--rule);
+        font-family: 'Geist Mono', monospace;
+        font-size: 10px;
+        letter-spacing: 0.1em; text-transform: uppercase;
         color: var(--mid);
       }
 
-      @media (max-width: 720px) {
-        .arrival { padding: 40px 24px 180px; }
-        .arrival-salon .arrival-bg { opacity: 0.12; }
-        .arrival-title { font-size: clamp(28px, 7vw, 40px); }
-        .arrival-tag { font-size: 16px; }
-        .arrival-prose { font-size: 17px; }
-        .arrival-marquee-portrait { width: 52px; height: 52px; }
-        .arrival-marquee-track { gap: 22px; }
-      }
-
-
-
-      /* ---- Mobile map list ---- */
       .map-list { display: none; max-width: 720px; margin: 0 auto; }
       .map-list-section { margin-bottom: 32px; }
       .map-list-tradition {
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase;
+        font-family: 'Geist Mono', monospace;
+        font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase;
         font-weight: 700;
         padding-bottom: 10px; margin-bottom: 12px;
         border-bottom: 2px solid;
@@ -2260,75 +2317,70 @@ function GlobalStyle() {
         font-family: inherit; color: var(--ink); text-align: left;
         transition: background 0.15s;
       }
-      .map-list-btn:not(:disabled):hover { background: rgba(26,22,20,0.04); }
+      .map-list-btn:not(:disabled):hover { background: rgba(20,17,13,0.04); }
       .map-list-btn:disabled { cursor: default; opacity: 0.55; }
-      .map-list-name {
-        font-family: 'Fraunces', serif; font-size: 18px;
-        flex: 1 1 auto;
-        font-variation-settings: "opsz" 24;
+      .map-list-portrait {
+        width: 44px; height: 44px;
+        border-radius: 50%;
+        border: 2px solid;
+        object-fit: cover;
+        flex: 0 0 auto;
       }
-      .map-list-name strong { font-weight: 500; letter-spacing: -0.01em; }
+      .map-list-name {
+        font-family: 'Geist', sans-serif; font-size: 15px;
+        flex: 1 1 auto;
+      }
+      .map-list-name strong { font-weight: 600; letter-spacing: -0.005em; }
       .map-list-name em { font-weight: 400; font-style: italic; color: var(--mid); }
       .map-list-meta {
         text-align: right; flex: 0 0 auto;
         display: flex; flex-direction: column; align-items: flex-end; gap: 2px;
       }
       .map-list-meta > span:first-child {
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 11px; color: var(--mid); letter-spacing: 0.05em;
+        font-family: 'Geist Mono', monospace;
+        font-size: 11px; color: var(--mid);
       }
       .map-list-note {
-        font-family: 'Fraunces', serif; font-style: italic;
-        font-size: 11px; color: var(--whisper);
-        font-variation-settings: "opsz" 12;
+        font-family: 'Geist Mono', monospace;
+        font-size: 9px; color: var(--whisper);
+        letter-spacing: 0.08em; text-transform: uppercase;
       }
       .map-list-slot {
         flex: 0 0 auto;
-        font-family: 'JetBrains Mono', monospace;
+        font-family: 'Geist Mono', monospace;
         font-size: 11px; font-weight: 700; color: #fff;
         background: var(--ink); padding: 2px 8px;
-        border-radius: 2px;
+        border-radius: 3px;
       }
-      .map-list-item.is-selected .map-list-name strong { color: #fff; }
-      .map-list-item.is-selected .map-list-meta > span:first-child { color: rgba(255,255,255,0.75); }
-      .map-list-item.is-selected .map-list-note { color: rgba(255,255,255,0.7); }
 
       @media (max-width: 720px) {
         .map-svg-wrapper { display: none; }
         .map-list { display: block; }
-        .aoa-header { padding: 18px 24px; }
-        .aoa-wordmark { font-size: 14px; }
-        .composition-room { grid-template-columns: 1fr; gap: 32px; }
-        .composition-figure-a, .composition-figure-b { text-align: center; }
-        .composition-divider { transform: rotate(90deg); }
-        .exchange-masthead { grid-template-columns: 1fr; gap: 18px; text-align: left; }
-        .turn-a, .turn-b { padding-left: 0; padding-right: 0; }
+        .aoa-header { padding: 14px 20px; }
       }
 
       /* ---- Confidence tooltip ---- */
       .confidence-note {
         position: relative;
         margin-top: 8px;
-        text-align: inherit;
       }
       .conf-right { text-align: right; }
       .conf-left { text-align: left; }
       .confidence-trigger {
         background: none; border: none; padding: 4px 0; cursor: pointer;
-        font-family: 'Fraunces', serif; font-style: italic;
-        font-size: 12px; color: var(--mid); opacity: 0.75;
-        font-variation-settings: "opsz" 14;
-        transition: opacity 0.2s, color 0.2s;
+        font-family: 'Geist Mono', monospace;
+        font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
+        color: var(--mid); opacity: 0.85;
+        transition: opacity 0.15s, color 0.15s;
       }
-      .confidence-trigger:hover { opacity: 1; color: var(--ink-quiet); }
+      .confidence-trigger:hover { opacity: 1; color: var(--ink); }
       .confidence-mark {
         display: inline-block;
         margin-left: 4px; padding: 0 5px;
         border: 1px solid currentColor;
         border-radius: 50%;
-        font-size: 9px; font-style: normal;
-        font-family: 'JetBrains Mono', monospace;
-        opacity: 0.6;
+        font-size: 9px;
+        opacity: 0.7;
       }
       .confidence-tip {
         position: absolute;
@@ -2336,484 +2388,246 @@ function GlobalStyle() {
         max-width: 240px; min-width: 220px;
         background: var(--ink); color: var(--bg);
         padding: 12px 14px;
-        font-family: 'Fraunces', serif;
+        font-family: 'Geist', sans-serif;
         font-size: 12px; line-height: 1.5;
-        font-variation-settings: "opsz" 14;
         z-index: 30;
-        box-shadow: 0 8px 24px rgba(26,22,20,0.18);
-        animation: keygateFade 0.2s ease both;
+        border-radius: 4px;
+        box-shadow: 4px 4px 0 var(--accent);
+        animation: fadeIn 0.2s ease both;
       }
       .conf-right .confidence-tip { right: 0; }
       .conf-left .confidence-tip { left: 0; }
 
-      /* ---- Exchange context primer ---- */
-      .exchange-context {
-        margin: 0 auto 48px;
-        max-width: 640px;
-        padding: 24px 28px;
-        background: var(--paper);
-        border-left: 3px solid var(--whisper);
-      }
-      .exchange-context-label {
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 9px; letter-spacing: 0.22em; text-transform: uppercase;
-        color: var(--mid); margin-bottom: 10px;
-      }
-      .exchange-context-body {
-        font-family: 'Fraunces', serif; font-style: italic;
-        font-size: 16px; line-height: 1.6; color: var(--ink-quiet);
-        margin: 0;
-        font-variation-settings: "opsz" 18;
-      }
-
-      /* ---- Export control ---- */
-      .ctrl-export em { font-style: italic; color: var(--mid); font-size: 13px; }
-
-      /* ---- Map screen ---- */
-      .map-screen { padding: 32px 40px 80px; }
-      .map-prelude {
-        display: flex; align-items: baseline; justify-content: space-between;
-        max-width: 720px; margin: 0 auto 32px;
-        animation: arrivalFade 0.6s ease both;
-      }
-      .map-prelude-text {
-        font-family: 'Fraunces', serif; font-style: italic;
-        font-size: 16px; color: var(--mid); margin: 0;
-        font-variation-settings: "opsz" 24;
-      }
-
-      .map-begin-bar {
-        position: fixed;
-        bottom: 0; left: 0; right: 0;
-        z-index: 40;
-        padding: 24px 40px 32px;
-        background: linear-gradient(to top, var(--bg) 60%, rgba(244,239,228,0));
-        display: flex;
-        justify-content: center;
-        animation: beginRise 0.5s cubic-bezier(0.2, 0.8, 0.3, 1) both;
-      }
-      @keyframes beginRise {
-        from { opacity: 0; transform: translateY(24px); }
-        to { opacity: 1; transform: translateY(0); }
-      }
-      .map-begin-btn {
-        background: var(--ink);
-        color: var(--paper);
-        border: none;
-        padding: 20px 44px;
-        font-family: 'Fraunces', serif;
-        font-size: 22px;
-        font-variation-settings: "opsz" 28;
-        letter-spacing: -0.01em;
-        cursor: pointer;
-        display: inline-flex;
-        align-items: center;
-        gap: 14px;
-        transition: gap 0.3s ease, background 0.3s ease, transform 0.2s ease;
-        box-shadow: 0 8px 32px rgba(26,22,20,0.18);
-      }
-      .map-begin-btn:hover {
-        gap: 22px;
-        background: #2d251f;
-        transform: translateY(-1px);
-      }
-      .map-begin-arrow {
-        font-size: 22px;
-        transition: transform 0.3s ease;
-      }
-      .map-begin-btn:hover .map-begin-arrow {
-        transform: translateX(4px);
-      }
-      .map-scroll {
-        overflow-x: auto; padding-bottom: 24px;
-        animation: arrivalFade 0.8s ease 0.1s both;
-      }
-      .map-scroll::-webkit-scrollbar { height: 8px; }
-      .map-scroll::-webkit-scrollbar-thumb { background: rgba(26,22,20,0.2); border-radius: 4px; }
-      .map-svg { width: ${VIEWBOX_W}px; min-width: 1200px; height: auto; display: block; }
-
-      .map-hover-card {
-        position: fixed; top: 92px; right: 32px; width: 320px;
-        background: var(--paper);
-        border: 1px solid var(--rule);
-        border-top: 4px solid;
-        padding: 22px 24px;
-        z-index: 50;
-        box-shadow: 0 12px 40px rgba(26,22,20,0.08);
-        animation: arrivalFade 0.3s ease both;
-      }
-      .map-hover-meta {
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase;
-        margin-bottom: 6px;
-      }
-      .map-hover-name {
-        font-family: 'Fraunces', serif; font-size: 26px; font-weight: 500;
-        line-height: 1.0; margin-bottom: 12px;
-        font-variation-settings: "opsz" 36;
-        letter-spacing: -0.015em;
-      }
-      .map-hover-bio {
-        font-family: 'Fraunces', serif; font-size: 14px;
-        line-height: 1.55; color: var(--ink-quiet); margin: 0;
-        font-variation-settings: "opsz" 14;
-      }
-      .map-hover-note {
-        margin-top: 14px; padding-top: 12px;
-        border-top: 1px solid var(--rule);
-        font-family: 'Fraunces', serif; font-style: italic;
-        font-size: 12px; color: var(--mid);
-        font-variation-settings: "opsz" 14;
-      }
-
-      /* ---- Composition ---- */
+      /* ---- COMPOSITION ---- */
       .composition {
         min-height: calc(100vh - 70px);
         display: flex; flex-direction: column; align-items: center;
-        justify-content: center; padding: 60px 40px;
+        justify-content: center;
+        padding: 60px 36px;
         background: var(--bg-warm);
       }
       .composition-empty {
-        font-family: 'Fraunces', serif; font-style: italic; color: var(--mid);
+        font-family: 'Instrument Serif', serif;
+        font-style: italic;
+        color: var(--mid);
       }
 
       .composition-room {
         display: grid; grid-template-columns: 1fr auto 1fr;
-        gap: 48px; align-items: center;
-        max-width: 980px; width: 100%;
-        margin-bottom: 80px;
-        animation: composeIn 1.0s ease both;
+        gap: 40px; align-items: center;
+        max-width: 1100px; width: 100%;
+        margin-bottom: 64px;
+        animation: fadeUp 0.8s ease both;
       }
-      @keyframes composeIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+      .comp-card-wrap { display: flex; flex-direction: column; align-items: center; }
+      .comp-card-a { align-items: flex-end; }
+      .comp-card-b { align-items: flex-start; }
 
-      .composition-figure { text-align: center; }
-      .composition-figure-a { text-align: right; }
-      .composition-figure-b { text-align: left; }
-      .composition-figure-btn {
-        background: none; border: none; padding: 0; cursor: pointer;
-        font-family: inherit; color: inherit; text-align: inherit;
-        display: block; width: 100%;
-        transition: opacity 0.2s;
-      }
-      .composition-figure-btn:hover .composition-swap { opacity: 1; }
-      .composition-meta {
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase;
-        color: var(--trad); margin-bottom: 14px;
-      }
-      .composition-name {
-        font-family: 'Fraunces', serif;
-        font-variation-settings: "opsz" 144;
-        letter-spacing: -0.03em; line-height: 0.92;
-      }
-      .composition-first {
-        display: block; font-size: clamp(18px, 2vw, 24px); font-weight: 400;
-        font-style: italic; color: var(--mid); margin-bottom: 6px;
-        font-variation-settings: "opsz" 24;
-        letter-spacing: -0.005em;
-      }
-      .composition-last {
-        display: block; font-size: clamp(56px, 8vw, 96px); font-weight: 500;
+      .comp-card {
+        background: var(--paper);
+        border: 1.5px solid var(--ink);
+        border-radius: 8px;
+        padding: 0 0 16px;
+        cursor: pointer;
+        position: relative;
+        overflow: hidden;
+        width: 280px;
+        max-width: 100%;
+        box-shadow: 4px 4px 0 var(--ink);
+        transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.18s;
+        font-family: inherit;
+        text-align: left;
         color: var(--ink);
       }
-      .composition-year {
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 13px; color: var(--mid); margin-top: 14px;
-        letter-spacing: 0.05em;
+      .comp-card:hover {
+        transform: translate(-2px, -3px);
+        box-shadow: 6px 7px 0 var(--ink);
       }
-      .composition-confidence {
-        font-family: 'Fraunces', serif; font-style: italic;
-        font-size: 12px; color: var(--mid); margin-top: 8px;
-        font-variation-settings: "opsz" 14;
-        opacity: 0.75;
-      }
-      .composition-swap {
-        font-family: 'Fraunces', serif; font-style: italic;
-        font-size: 12px; color: var(--whisper); margin-top: 10px;
-        opacity: 0; transition: opacity 0.3s;
-      }
+      .comp-card-a .comp-card { transform: rotate(-1.5deg); }
+      .comp-card-b .comp-card { transform: rotate(1.5deg); }
+      .comp-card-a .comp-card:hover { transform: rotate(-1.5deg) translate(-2px, -3px); }
+      .comp-card-b .comp-card:hover { transform: rotate(1.5deg) translate(-2px, -3px); }
 
-      .composition-divider {
+      .comp-card-photo {
+        width: 100%; aspect-ratio: 1 / 1;
+        background: linear-gradient(160deg, #C9A878 0%, #6B5640 100%);
+        border-bottom: 4px solid var(--trad);
+        display: flex; align-items: center; justify-content: center;
+        overflow: hidden;
+      }
+      .comp-card-photo img {
+        width: 100%; height: 100%;
+        object-fit: cover; display: block;
+      }
+      .comp-card-meta {
+        padding: 18px 20px 8px;
+      }
+      .comp-card-trad {
+        font-family: 'Geist Mono', monospace;
+        font-size: 10px; font-weight: 500;
+        letter-spacing: 0.18em; text-transform: uppercase;
+        color: var(--trad);
+        margin-bottom: 10px;
+      }
+      .comp-card-name {
+        font-family: 'Instrument Serif', serif;
+        line-height: 0.95;
+      }
+      .comp-first {
+        display: block; font-size: 14px;
+        font-style: italic; color: var(--mid);
+        margin-bottom: 4px;
+        font-family: 'Geist', sans-serif;
+        letter-spacing: -0.005em;
+      }
+      .comp-last {
+        display: block; font-size: 36px;
+        color: var(--ink);
+        letter-spacing: -0.025em;
+      }
+      .comp-card-year {
+        font-family: 'Geist Mono', monospace;
+        font-size: 11px; color: var(--whisper);
+        margin-top: 10px;
+        letter-spacing: 0.06em;
+      }
+      .comp-card-swap {
+        position: absolute;
+        bottom: 12px; right: 16px;
+        font-family: 'Geist Mono', monospace;
+        font-size: 10px; font-weight: 500;
+        letter-spacing: 0.12em; text-transform: uppercase;
+        color: var(--accent);
+        opacity: 0;
+        transition: opacity 0.2s;
+      }
+      .comp-card:hover .comp-card-swap { opacity: 1; }
+
+      .composition-vs {
         display: flex; flex-direction: column; align-items: center; gap: 14px;
       }
-      .composition-divider-bar {
-        width: 60px; height: 2px;
+      .vs-text {
+        font-family: 'Instrument Serif', serif;
+        font-style: italic;
+        font-size: 32px;
+        color: var(--ink);
+        position: relative;
       }
-      .composition-amp {
-        font-family: 'Fraunces', serif; font-size: 22px;
-        color: var(--whisper); font-style: italic;
+      .vs-text::after {
+        content: "";
+        position: absolute;
+        bottom: 4px; left: -4px; right: -4px;
+        height: 8px;
+        background: var(--accent-yellow);
+        z-index: -1;
+        transform: skew(-8deg);
       }
+      .vs-bar { width: 60px; height: 2px; }
 
       .composition-actions {
         max-width: 560px; width: 100%; text-align: center;
         opacity: 0; transform: translateY(8px);
-        transition: opacity 0.8s ease, transform 0.8s ease;
+        transition: opacity 0.6s ease, transform 0.6s ease;
       }
       .composition-actions.is-ready {
         opacity: 1; transform: translateY(0);
       }
       .composition-prompt {
-        font-family: 'Fraunces', serif; font-style: italic;
-        font-size: 22px; color: var(--ink-quiet); margin: 0 0 24px;
-        font-variation-settings: "opsz" 36;
+        font-family: 'Instrument Serif', serif;
+        font-style: italic;
+        font-size: 24px; color: var(--ink); margin: 0 0 22px;
       }
       .composition-input {
-        width: 100%; background: transparent; border: none;
-        border-bottom: 1px solid var(--rule);
-        padding: 14px 0;
-        font-family: 'Fraunces', serif; font-size: 22px;
+        width: 100%; background: var(--paper);
+        border: 1.5px solid var(--ink);
+        border-radius: 100px;
+        padding: 14px 22px;
+        font-family: 'Geist', sans-serif;
+        font-size: 16px;
         color: var(--ink); text-align: center;
         outline: none;
-        font-variation-settings: "opsz" 24;
-        transition: border-color 0.2s;
+        box-shadow: 3px 3px 0 var(--ink);
+        transition: box-shadow 0.15s, transform 0.15s;
       }
       .composition-input::placeholder {
-        color: var(--whisper); font-style: italic;
+        color: var(--whisper);
       }
-      .composition-input:focus { border-bottom-color: var(--ink); }
+      .composition-input:focus {
+        box-shadow: 4px 4px 0 var(--accent);
+        transform: translate(-1px, -1px);
+      }
 
       .composition-suggestions {
-        list-style: none; padding: 0; margin: 24px 0 40px;
-        display: flex; flex-wrap: wrap; gap: 16px 24px; justify-content: center;
+        list-style: none; padding: 0; margin: 22px 0 36px;
+        display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;
       }
       .composition-suggestion {
-        background: none; border: none; padding: 0; cursor: pointer;
-        font-family: 'Fraunces', serif; font-style: italic;
-        font-size: 14px; color: var(--mid);
-        transition: color 0.2s;
+        background: var(--bg); border: 1px solid var(--rule-strong);
+        padding: 6px 12px;
+        border-radius: 100px;
+        cursor: pointer;
+        font-family: 'Geist Mono', monospace;
+        font-size: 11px; font-weight: 500;
+        letter-spacing: 0.04em;
+        color: var(--ink-quiet);
+        transition: all 0.15s;
       }
-      .composition-suggestion:hover { color: var(--ink); }
+      .composition-suggestion:hover {
+        background: var(--ink); color: var(--bg);
+        border-color: var(--ink);
+      }
 
       .composition-begin {
         background: var(--ink); color: var(--bg);
-        border: none; padding: 16px 36px;
-        font-family: 'Fraunces', serif; font-size: 16px; font-weight: 500;
-        letter-spacing: 0.02em;
+        border: 2px solid var(--ink);
+        padding: 18px 40px;
+        font-family: 'Geist', sans-serif;
+        font-size: 16px; font-weight: 600;
+        letter-spacing: -0.01em;
         cursor: pointer;
-        transition: all 0.2s;
-        font-variation-settings: "opsz" 18;
+        border-radius: 100px;
+        box-shadow: 4px 4px 0 var(--accent);
+        transition: transform 0.15s, box-shadow 0.15s;
+        display: inline-flex; align-items: center; gap: 10px;
       }
-      .composition-begin:hover { background: var(--ink-quiet); transform: translateY(-1px); }
-      .composition-arrow { display: inline-block; margin-left: 8px; transition: transform 0.2s; }
-      .composition-begin:hover .composition-arrow { transform: translateX(4px); }
+      .composition-begin:hover {
+        transform: translate(-2px, -2px);
+        box-shadow: 6px 6px 0 var(--accent);
+      }
+      .composition-arrow { transition: transform 0.15s; }
+      .composition-begin:hover .composition-arrow { transform: translateX(3px); }
 
-      /* ---- Exchange ---- */
+      @media (max-width: 768px) {
+        .composition-room { grid-template-columns: 1fr; gap: 24px; }
+        .comp-card-wrap { align-items: center; }
+        .comp-card-a .comp-card, .comp-card-b .comp-card { transform: none; }
+        .comp-card-a .comp-card:hover, .comp-card-b .comp-card:hover { transform: translate(-2px, -3px); }
+        .composition-vs { transform: rotate(0deg); }
+      }
+
+      /* ---- EXCHANGE ---- */
       .exchange {
         min-height: calc(100vh - 70px);
-        max-width: 880px; margin: 0 auto;
-        padding: 48px 40px 96px;
+        max-width: 920px; margin: 0 auto;
+        padding: 48px 36px 96px;
       }
-
       .exchange-masthead {
         display: grid; grid-template-columns: 1fr auto 1fr;
         gap: 32px; align-items: end;
-        padding-bottom: 36px; margin-bottom: 24px;
+        padding-bottom: 32px; margin-bottom: 22px;
         border-bottom: 1px solid var(--rule);
       }
       .exchange-disclaimer {
-        font-family: 'Fraunces', serif; font-style: italic;
-        font-size: 12px; color: var(--mid); margin: 0 0 40px;
-        text-align: center; line-height: 1.5;
-        font-variation-settings: "opsz" 14;
-        opacity: 0.7;
-        max-width: 560px; margin-left: auto; margin-right: auto;
+        font-family: 'Geist Mono', monospace;
+        font-size: 10px; letter-spacing: 0.1em;
+        color: var(--whisper);
+        margin: 0 auto 36px;
+        text-align: center; line-height: 1.6;
+        max-width: 640px;
       }
-      .participant {
-        transition: opacity 0.8s ease;
-      }
+
+      .participant { transition: opacity 0.8s ease; }
       .participant.is-dim { opacity: 0.42; }
-      .participant-meta {
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase;
-        color: var(--trad); margin-bottom: 8px;
-      }
-      .participant-name {
-        font-family: 'Fraunces', serif;
-        font-variation-settings: "opsz" 72;
-        letter-spacing: -0.025em; line-height: 0.95;
-      }
-      .participant-first {
-        display: block; font-size: 13px; font-weight: 400;
-        font-style: italic; color: var(--mid); margin-bottom: 4px;
-        font-variation-settings: "opsz" 14;
-      }
-      .participant-last {
-        display: block; font-size: clamp(32px, 4vw, 48px); font-weight: 500;
-        color: var(--ink);
-      }
-      .participant-year {
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 11px; color: var(--mid); margin-top: 6px;
-        letter-spacing: 0.05em;
-      }
-
-      .exchange-topic {
-        text-align: center; padding: 0 16px;
-      }
-      .exchange-topic-label {
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 9px; letter-spacing: 0.22em; text-transform: uppercase;
-        color: var(--mid); margin-bottom: 8px;
-      }
-      .exchange-topic-text {
-        font-family: 'Fraunces', serif; font-style: italic;
-        font-size: 17px; color: var(--ink-quiet); line-height: 1.3;
-        font-variation-settings: "opsz" 24;
-        max-width: 220px;
-      }
-      .exchange-topic-pending { color: var(--whisper); letter-spacing: 0.3em; }
-
-      .exchange-body { min-height: 200px; }
-      .exchange-loading {
-        padding: 60px 0; text-align: center;
-        font-family: 'Fraunces', serif; font-style: italic;
-        font-size: 18px; color: var(--mid);
-        font-variation-settings: "opsz" 24;
-        animation: loadFade 2s ease infinite;
-      }
-      .exchange-loading-inline { padding: 24px 0; font-size: 15px; }
-      @keyframes loadFade { 0%,100% { opacity: 0.5; } 50% { opacity: 1; } }
-
-      .exchange-error {
-        font-family: 'Fraunces', serif; font-style: italic;
-        font-size: 15px; color: #d6342b;
-      }
-
-      .turn {
-        margin-bottom: 32px;
-        animation: turnIn 0.7s ease both;
-      }
-      @keyframes turnIn {
-        from { opacity: 0; transform: translateY(8px); }
-        to { opacity: 1; transform: translateY(0); }
-      }
-      .turn-a { padding-right: 8%; }
-      .turn-b { padding-left: 8%; text-align: left; }
-
-      .turn-header {
-        display: flex; align-items: baseline; gap: 14px;
-        margin-bottom: 10px; padding-bottom: 8px;
-        border-bottom: 1px solid var(--rule);
-      }
-      .turn-name {
-        font-family: 'Fraunces', serif; font-size: 22px; font-weight: 500;
-        color: var(--trad); letter-spacing: -0.01em;
-        font-variation-settings: "opsz" 24;
-      }
-      .turn-meta {
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 10px; color: var(--mid); letter-spacing: 0.05em;
-      }
-      .turn-body {
-        font-family: 'Fraunces', serif; font-size: 18px; line-height: 1.55;
-        color: var(--ink); margin: 0;
-        font-variation-settings: "opsz" 18;
-      }
-
-      .host-turn {
-        margin: 24px 0; padding: 18px 24px;
-        background: var(--paper);
-        border-left: 3px solid var(--whisper);
-        animation: turnIn 0.7s ease both;
-      }
-      .host-turn-label {
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 9px; letter-spacing: 0.2em; text-transform: uppercase;
-        color: var(--mid); margin-bottom: 8px;
-      }
-      .host-turn-body {
-        font-family: 'Fraunces', serif; font-style: italic;
-        font-size: 16px; color: var(--ink-quiet); margin: 0;
-        line-height: 1.5;
-        font-variation-settings: "opsz" 18;
-      }
-
-      /* ---- Exchange controls ---- */
-      .exchange-controls {
-        margin-top: 48px; padding-top: 32px;
-        border-top: 1px solid var(--rule);
-        animation: turnIn 0.6s ease 0.2s both;
-      }
-      .exchange-controls-row {
-        display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
-      }
-      .ctrl {
-        background: none; border: none; padding: 0; cursor: pointer;
-        font-family: 'Fraunces', serif; font-size: 15px;
-        color: var(--ink); transition: color 0.2s;
-        font-variation-settings: "opsz" 18;
-      }
-      .ctrl:hover { color: var(--ink-quiet); }
-      .ctrl-primary {
-        font-weight: 500;
-        text-decoration: underline; text-decoration-thickness: 2px;
-        text-underline-offset: 4px;
-      }
-      .ctrl-divider {
-        width: 1px; height: 14px; background: var(--rule);
-      }
-
-      .followup {
-        animation: turnIn 0.4s ease both;
-      }
-      .followup-label {
-        font-family: 'Fraunces', serif; font-style: italic;
-        font-size: 14px; color: var(--mid); margin-bottom: 12px;
-      }
-      .followup-input {
-        width: 100%; background: transparent; border: none;
-        border-bottom: 1px solid var(--ink); padding: 12px 0;
-        font-family: 'Fraunces', serif; font-size: 18px; color: var(--ink);
-        outline: none;
-        font-variation-settings: "opsz" 18;
-      }
-      .followup-input::placeholder { color: var(--whisper); font-style: italic; }
-      .followup-actions {
-        display: flex; align-items: center; gap: 20px; margin-top: 16px;
-      }
-      .followup-submit {
-        background: var(--ink); color: var(--bg); border: none;
-        padding: 10px 22px; cursor: pointer;
-        font-family: 'Fraunces', serif; font-size: 14px; font-weight: 500;
-        transition: all 0.2s;
-        font-variation-settings: "opsz" 18;
-      }
-      .followup-submit:disabled { opacity: 0.3; cursor: not-allowed; }
-      .followup-submit:not(:disabled):hover { background: var(--ink-quiet); }
-      .followup-submit span { margin-left: 6px; }
-
-      /* ---- Portraits ---- */
-      .map-hover-portrait {
-        width: 88px; height: 88px;
-        border-radius: 50%;
-        border: 3px solid;
-        object-fit: cover;
-        margin-bottom: 16px;
-        background: var(--bg);
-      }
-      .map-list-portrait {
-        width: 44px; height: 44px;
-        border-radius: 50%;
-        border: 2px solid;
-        object-fit: cover;
-        flex: 0 0 auto;
-        background: var(--bg);
-      }
-      .composition-portrait {
-        display: block;
-        width: 200px; height: 200px;
-        border-radius: 50%;
-        border: 4px solid;
-        object-fit: cover;
-        margin: 0 auto 24px;
-        background: var(--bg);
-        box-shadow: 0 4px 24px rgba(26,22,20,0.08);
-      }
-      .composition-figure-a .composition-portrait { margin-left: auto; margin-right: 0; }
-      .composition-figure-b .composition-portrait { margin-left: 0; margin-right: auto; }
-      .participant {
-        position: relative;
-      }
       .participant-portrait {
         width: 64px; height: 64px;
         border-radius: 50%;
@@ -2825,33 +2639,226 @@ function GlobalStyle() {
       }
       .part-left .participant-portrait { margin-left: 0; margin-right: auto; }
       .part-right .participant-portrait { margin-left: auto; margin-right: 0; }
+      .participant-meta {
+        font-family: 'Geist Mono', monospace;
+        font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase;
+        color: var(--trad); margin-bottom: 8px;
+      }
+      .participant-name {
+        font-family: 'Instrument Serif', serif;
+        line-height: 0.95;
+        letter-spacing: -0.025em;
+      }
+      .participant-first {
+        display: block; font-size: 13px;
+        font-style: italic; color: var(--mid); margin-bottom: 4px;
+        font-family: 'Geist', sans-serif;
+      }
+      .participant-last {
+        display: block; font-size: clamp(34px, 4vw, 50px);
+        color: var(--ink);
+      }
+      .participant-year {
+        font-family: 'Geist Mono', monospace;
+        font-size: 11px; color: var(--mid); margin-top: 6px;
+        letter-spacing: 0.05em;
+      }
+
+      .exchange-topic { text-align: center; padding: 0 16px; }
+      .exchange-topic-label {
+        font-family: 'Geist Mono', monospace;
+        font-size: 9px; letter-spacing: 0.22em; text-transform: uppercase;
+        color: var(--mid); margin-bottom: 8px;
+      }
+      .exchange-topic-text {
+        font-family: 'Instrument Serif', serif;
+        font-style: italic;
+        font-size: 18px; color: var(--ink); line-height: 1.3;
+        max-width: 240px;
+      }
+      .exchange-topic-pending { color: var(--whisper); letter-spacing: 0.3em; }
+
+      .exchange-context {
+        margin: 0 auto 40px;
+        max-width: 640px;
+        padding: 20px 24px;
+        background: var(--paper);
+        border: 1px solid var(--rule);
+        border-left: 3px solid var(--accent);
+        border-radius: 4px;
+      }
+      .exchange-context-label {
+        font-family: 'Geist Mono', monospace;
+        font-size: 9px; letter-spacing: 0.22em; text-transform: uppercase;
+        color: var(--mid); margin-bottom: 10px;
+      }
+      .exchange-context-body {
+        font-family: 'Instrument Serif', serif;
+        font-style: italic;
+        font-size: 16px; line-height: 1.55; color: var(--ink-quiet);
+        margin: 0;
+      }
+
+      .exchange-body { min-height: 200px; }
+      .exchange-loading {
+        padding: 60px 0; text-align: center;
+        font-family: 'Instrument Serif', serif;
+        font-style: italic;
+        font-size: 18px; color: var(--mid);
+        animation: loadFade 2s ease infinite;
+      }
+      .exchange-loading-inline { padding: 20px 0; font-size: 15px; }
+      @keyframes loadFade { 0%,100% { opacity: 0.5; } 50% { opacity: 1; } }
+
+      .exchange-error {
+        font-family: 'Instrument Serif', serif;
+        font-style: italic;
+        font-size: 15px; color: var(--accent);
+        text-align: center;
+        padding: 20px 0;
+      }
+
+      .turn {
+        margin-bottom: 32px;
+        animation: fadeUp 0.6s ease both;
+      }
+      .turn-a { padding-right: 8%; }
+      .turn-b { padding-left: 8%; }
+      .turn-header {
+        display: flex; align-items: center; gap: 12px;
+        margin-bottom: 10px; padding-bottom: 8px;
+        border-bottom: 1px solid var(--rule);
+      }
       .turn-portrait {
         width: 32px; height: 32px;
-        border-radius: 50%;
-        border: 2px solid;
+        border-radius: 50%; border: 2px solid;
         object-fit: cover;
-        margin-right: 4px;
         background: var(--bg);
         flex: 0 0 auto;
       }
-      .turn-header { display: flex; align-items: center; gap: 12px; }
-
-      @media (max-width: 720px) {
-        .composition-portrait { width: 140px; height: 140px; }
-        .map-list-portrait { width: 36px; height: 36px; }
-        .participant-portrait { width: 48px; height: 48px; }
+      .turn-name {
+        font-family: 'Instrument Serif', serif;
+        font-size: 24px; font-weight: 400;
+        color: var(--trad); letter-spacing: -0.015em;
+      }
+      .turn-meta {
+        font-family: 'Geist Mono', monospace;
+        font-size: 10px; color: var(--mid);
+        letter-spacing: 0.05em;
+      }
+      .turn-body {
+        font-family: 'Geist', sans-serif;
+        font-size: 17px; line-height: 1.6;
+        color: var(--ink); margin: 0;
       }
 
-      /* ---- Report card ---- */
+      .host-turn {
+        margin: 24px 0; padding: 16px 22px;
+        background: var(--paper);
+        border: 1px solid var(--rule);
+        border-left: 3px solid var(--accent-blue);
+        border-radius: 4px;
+        animation: fadeUp 0.6s ease both;
+      }
+      .host-turn-label {
+        font-family: 'Geist Mono', monospace;
+        font-size: 9px; letter-spacing: 0.2em; text-transform: uppercase;
+        color: var(--mid); margin-bottom: 8px;
+      }
+      .host-turn-body {
+        font-family: 'Instrument Serif', serif; font-style: italic;
+        font-size: 16px; color: var(--ink-quiet); margin: 0;
+        line-height: 1.5;
+      }
+
+      .exchange-controls {
+        margin-top: 40px; padding-top: 28px;
+        border-top: 1px solid var(--rule);
+        animation: fadeUp 0.6s ease 0.1s both;
+      }
+      .exchange-controls-row {
+        display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+      }
+      .ctrl {
+        background: var(--paper);
+        border: 1.5px solid var(--ink);
+        padding: 8px 14px;
+        cursor: pointer;
+        font-family: 'Geist Mono', monospace;
+        font-size: 11px; font-weight: 500;
+        letter-spacing: 0.08em; text-transform: uppercase;
+        color: var(--ink);
+        border-radius: 100px;
+        box-shadow: 2px 2px 0 var(--ink);
+        transition: transform 0.15s, box-shadow 0.15s, background 0.15s;
+      }
+      .ctrl:hover {
+        transform: translate(-1px, -1px);
+        box-shadow: 3px 3px 0 var(--ink);
+      }
+      .ctrl-primary {
+        background: var(--accent); color: var(--bg);
+        border-color: var(--ink);
+      }
+      .ctrl-primary:hover { background: var(--ink); }
+      .ctrl-divider {
+        width: 1px; height: 16px; background: var(--rule-strong);
+      }
+      .ctrl-export em { font-style: italic; color: var(--mid); }
+
+      .followup { animation: fadeUp 0.4s ease both; }
+      .followup-label {
+        font-family: 'Geist Mono', monospace;
+        font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;
+        color: var(--mid); margin-bottom: 12px;
+      }
+      .followup-input {
+        width: 100%; background: var(--paper);
+        border: 1.5px solid var(--ink);
+        border-radius: 100px;
+        padding: 14px 22px;
+        font-family: 'Geist', sans-serif;
+        font-size: 16px; color: var(--ink);
+        outline: none;
+        box-shadow: 3px 3px 0 var(--ink);
+      }
+      .followup-input::placeholder { color: var(--whisper); }
+      .followup-actions {
+        display: flex; align-items: center; gap: 16px; margin-top: 16px;
+      }
+      .followup-submit {
+        background: var(--ink); color: var(--bg);
+        border: 2px solid var(--ink);
+        padding: 10px 22px; cursor: pointer;
+        font-family: 'Geist', sans-serif;
+        font-size: 14px; font-weight: 600;
+        border-radius: 100px;
+        box-shadow: 3px 3px 0 var(--accent);
+        transition: transform 0.15s, box-shadow 0.15s;
+      }
+      .followup-submit:disabled { opacity: 0.3; cursor: not-allowed; }
+      .followup-submit:not(:disabled):hover {
+        transform: translate(-1px, -1px);
+        box-shadow: 4px 4px 0 var(--accent);
+      }
+      .followup-submit span { margin-left: 6px; }
+
+      @media (max-width: 720px) {
+        .exchange-masthead { grid-template-columns: 1fr; gap: 18px; text-align: left; }
+        .turn-a, .turn-b { padding-left: 0; padding-right: 0; }
+      }
+
+      /* ============================================================
+         REPORT CARD — preserved from prior. Editorial register.
+         ============================================================ */
       .report-card {
         max-width: 760px; margin: 48px auto 0;
         padding: 32px 36px;
         background: #fbf8ef;
         border: 1px solid var(--rule);
         border-radius: 4px;
-        animation: cardFade 0.6s ease both;
+        animation: fadeUp 0.6s ease both;
       }
-      @keyframes cardFade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
       .report-card-loading {
         text-align: center;
         padding: 48px 36px;
@@ -3008,7 +3015,6 @@ function GlobalStyle() {
     `}</style>
   );
 }
-
 
 const root = ReactDOM.createRoot(document.getElementById("root"));
 root.render(<AnatomyOfAdvertising />);
