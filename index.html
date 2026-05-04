@@ -174,11 +174,16 @@ const BRIDGES = [
 ];
 
 const WARM_STARTS = [
-  { a:"hopkins", b:"pollitt", question:"What should research do?", topic:"what research should do",
-    subtitle:"The foundational fight.",
-    context:"Hopkins set the rules for measuring what works. Pollitt set the rules for understanding what matters. They never agreed. Modern advertising still doesn't." },
-  { a:"sharp", b:"bernbach", question:"What is creativity for?", topic:"creativity", subtitle:"Data against instinct." },
-  { a:"reeves", b:"heath", question:"What counts as proof?", topic:"what counts as proof", subtitle:"What you can prove against what you can't." },
+  { a:"hopkins", b:"pollitt", topic:"what research should do" },
+  { a:"sharp", b:"bernbach", topic:"what creativity is for" },
+  { a:"reeves", b:"heath", topic:"what counts as proof" },
+  { a:"aristotle", b:"kahneman", topic:"is persuasion rational or emotional" },
+  { a:"bernays", b:"adams", topic:"is advertising a public good" },
+  { a:"ogilvy", b:"bernbach", topic:"argument or irony" },
+  { a:"dichter", b:"packard", topic:"the ethics of motivation research" },
+  { a:"ehrenberg", b:"ogilvy", topic:"distinctiveness or differentiation" },
+  { a:"sutherland", b:"hopkins", topic:"alchemy or measurement" },
+  { a:"macmanus", b:"reeves", topic:"image or claim" },
 ];
 
 const CONFIDENCE_EXPLANATIONS = {
@@ -991,48 +996,104 @@ function Shell({ phase, onLeave, onMap, children }) {
 // ARRIVAL — playful, game-mode
 // ============================================================
 function ArrivalScreen({ warmStarts, thinkerById, onWarmStart, onOpenMap }) {
-  const cast = THINKERS.filter(t => !t.kind);
+  const [pairIndex, setPairIndex] = useState(0);
+  const [flipping, setFlipping] = useState(false);
+
+  // Auto-rotate every ~4.5 seconds
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setFlipping(true);
+      setTimeout(() => {
+        setPairIndex(i => (i + 1) % warmStarts.length);
+        setFlipping(false);
+      }, 350);
+    }, 4500);
+    return () => clearInterval(interval);
+  }, [warmStarts.length]);
+
+  const current = warmStarts[pairIndex];
+  const aObj = thinkerById[current.a];
+  const bObj = thinkerById[current.b];
+  if (!aObj || !bObj) return null;
+  const tradA = TRADITIONS[aObj.tradition];
+  const tradB = TRADITIONS[bObj.tradition];
+
+  function handleStartFight() {
+    onWarmStart(current.a, current.b, current.topic, null);
+  }
+
+  function handleManualPick(e) {
+    e.stopPropagation();
+    onOpenMap();
+  }
+
   return (
-    <section className="arrival">
-      <div className="arrival-hero">
-        <h1 className="big-headline">
-          Pick a <span className="bh-fight">fight</span>.
-        </h1>
-        <p className="big-deck">
-          Pick two of the figures below. Set the topic. Six rounds.
+    <section className="arrival-v2">
+      <div className="arrival-v2-inner">
+        <h1 className="arrival-v2-title">The Anatomy of Advertising</h1>
+        <p className="arrival-v2-subtitle"><em>Feldwick's argument, made playable.</em></p>
+
+        <p className="arrival-v2-deck">
+          Pick two figures from the canon. Pick a topic. Watch them disagree for six rounds. Get a referee's reading on what landed, what got dodged, and where each voice strayed from the record.
         </p>
-      </div>
 
-      <div className="cast-section">
-        <div className="cast-grid">
-          {cast.map((t, i) => {
-            const trad = TRADITIONS[t.tradition];
-            const portrait = hasPortrait(t);
-            return (
-              <button key={t.id} className="card" onClick={onOpenMap}
-                style={{ ['--trad']: trad.color }}>
-                <div className="card-photo" style={{ borderBottomColor: trad.color }}>
-                  {portrait ? (
-                    <img src={portraitURL(t.id)} alt="" />
-                  ) : (
-                    <span className="card-initial">{t.last[0]}</span>
-                  )}
-                </div>
-                <div className="card-meta">
-                  <div className="card-name">{t.last.startsWith("&") ? `${t.first} ${t.last}` : t.last}</div>
-                  <div className="card-year">{t.year}</div>
-                </div>
-              </button>
-            );
-          })}
+        <p className="arrival-v2-deck-2">
+          A diagnostic tool. Not a search engine.
+        </p>
+
+        <div className="rotating-pair" onClick={handleStartFight} role="button" tabIndex={0}
+          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") handleStartFight(); }}>
+          <div className={`rp-card rp-card-a ${flipping ? "is-flipping" : ""}`} style={{ ['--trad']: tradA.color }}>
+            <div className="rp-photo">
+              {hasPortrait(aObj) && <img src={portraitURL(aObj.id)} alt="" />}
+            </div>
+            <div className="rp-meta">
+              <div className="rp-trad">{tradA.label}</div>
+              <div className="rp-name">{aObj.last}</div>
+              <div className="rp-year">{aObj.year}</div>
+            </div>
+          </div>
+
+          <div className="rp-vs">
+            <div className="rp-vs-text">VS</div>
+          </div>
+
+          <div className={`rp-card rp-card-b ${flipping ? "is-flipping" : ""}`} style={{ ['--trad']: tradB.color }}>
+            <div className="rp-photo">
+              {hasPortrait(bObj) && <img src={portraitURL(bObj.id)} alt="" />}
+            </div>
+            <div className="rp-meta">
+              <div className="rp-trad">{tradB.label}</div>
+              <div className="rp-name">{bObj.last}</div>
+              <div className="rp-year">{bObj.year}</div>
+            </div>
+          </div>
         </div>
-      </div>
 
-      <div className="arrival-cta">
-        <button className="walk-in" onClick={onOpenMap}>
-          Walk in
-          <span className="walk-arrow">→</span>
-        </button>
+        <div className={`rp-topic ${flipping ? "is-flipping" : ""}`}>
+          <span className="rp-topic-label">On the table:</span>
+          <span className="rp-topic-text"><em>{current.topic}</em></span>
+        </div>
+
+        <div className="rp-actions">
+          <button className="rp-start" onClick={handleStartFight}>
+            Start this fight
+            <span className="rp-arrow">→</span>
+          </button>
+          <button className="rp-pick" onClick={handleManualPick}>
+            Or pick your own two
+          </button>
+        </div>
+
+        <div className="rp-dots" aria-hidden="true">
+          {warmStarts.map((_, i) => (
+            <span key={i} className={`rp-dot ${i === pairIndex ? "is-active" : ""}`}></span>
+          ))}
+        </div>
+
+        <p className="arrival-v2-foot">
+          <em>Reconstructions, not quotations.</em> Thirty-two figures from Aristotle to Kahneman, modeled on the documented record.
+        </p>
       </div>
     </section>
   );
@@ -1926,53 +1987,258 @@ function GlobalStyle() {
         animation: liveDot 1.8s ease-in-out infinite;
       }
 
-      /* ---- ARRIVAL ---- */
-      .arrival {
-        position: relative;
-        padding: 0;
+      /* ---- ARRIVAL v2 ---- */
+      .arrival-v2 {
+        min-height: calc(100vh - 70px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 56px 36px 80px;
       }
-      .arrival-hero {
-        padding: 80px 36px 48px;
+      .arrival-v2-inner {
+        max-width: 720px;
+        width: 100%;
         text-align: center;
-        position: relative;
         animation: fadeIn 0.8s ease both;
       }
-
-      .big-headline {
+      .arrival-v2-title {
         font-family: 'Instrument Serif', serif;
-        font-size: clamp(56px, 9vw, 128px);
+        font-size: clamp(40px, 5.6vw, 64px);
         font-weight: 400;
-        line-height: 0.95;
-        letter-spacing: -0.035em;
-        margin: 0 auto;
+        line-height: 1.0;
+        letter-spacing: -0.025em;
+        color: var(--ink);
+        margin: 0 0 14px;
+      }
+      .arrival-v2-subtitle {
+        font-family: 'Instrument Serif', serif;
+        font-size: clamp(17px, 1.4vw, 20px);
+        color: var(--mid);
+        margin: 0 0 36px;
+      }
+      .arrival-v2-subtitle em { color: var(--accent); font-style: italic; }
+      .arrival-v2-deck {
+        font-family: 'Geist', sans-serif;
+        font-size: clamp(15px, 1.4vw, 16px);
+        line-height: 1.6;
+        color: var(--ink-quiet);
+        max-width: 56ch;
+        margin: 0 auto 16px;
+        letter-spacing: -0.005em;
+      }
+      .arrival-v2-deck-2 {
+        font-family: 'Geist Mono', monospace;
+        font-size: 11px;
+        font-weight: 500;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--ink);
+        margin: 0 0 56px;
+      }
+      .arrival-v2-foot {
+        font-family: 'Geist', sans-serif;
+        font-size: 12px;
+        line-height: 1.5;
+        color: var(--whisper);
+        margin: 32px auto 0;
+        max-width: 56ch;
+      }
+      .arrival-v2-foot em { font-style: italic; color: var(--mid); }
+
+      /* Rotating pair */
+      .rotating-pair {
+        display: grid;
+        grid-template-columns: 1fr auto 1fr;
+        gap: 24px;
+        align-items: center;
+        max-width: 600px;
+        margin: 0 auto 28px;
+        cursor: pointer;
+        outline: none;
+      }
+      .rotating-pair:focus-visible .rp-card {
+        box-shadow: 5px 6px 0 var(--accent);
+      }
+
+      .rp-card {
+        background: var(--paper);
+        border: 1.5px solid var(--ink);
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 4px 4px 0 var(--ink);
+        transition: transform 0.35s cubic-bezier(0.45, 0, 0.55, 1), opacity 0.35s ease;
+      }
+      .rp-card-a { transform: rotate(-1.5deg); }
+      .rp-card-b { transform: rotate(1.5deg); }
+      .rotating-pair:hover .rp-card-a { transform: rotate(-1.5deg) translate(-2px, -3px); box-shadow: 6px 7px 0 var(--ink); }
+      .rotating-pair:hover .rp-card-b { transform: rotate(1.5deg) translate(-2px, -3px); box-shadow: 6px 7px 0 var(--ink); }
+      .rp-card.is-flipping { opacity: 0; }
+      .rp-card-a.is-flipping { transform: rotate(-1.5deg) translateX(-12px); }
+      .rp-card-b.is-flipping { transform: rotate(1.5deg) translateX(12px); }
+
+      .rp-photo {
+        width: 100%;
+        aspect-ratio: 1 / 1;
+        background: var(--bg-warm);
+        border-bottom: 4px solid var(--trad);
+        display: flex; align-items: center; justify-content: center;
+        overflow: hidden;
+      }
+      .rp-photo img {
+        width: 100%; height: 100%;
+        object-fit: cover;
+        display: block;
+      }
+      .rp-meta {
+        padding: 14px 16px 16px;
+        text-align: left;
+      }
+      .rp-trad {
+        font-family: 'Geist Mono', monospace;
+        font-size: 9px;
+        font-weight: 600;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--trad);
+        margin-bottom: 6px;
+      }
+      .rp-name {
+        font-family: 'Instrument Serif', serif;
+        font-size: 28px;
+        line-height: 1.0;
+        letter-spacing: -0.02em;
         color: var(--ink);
       }
-      .bh-fight {
-        font-style: italic;
-        color: var(--accent);
-        position: relative;
+      .rp-year {
+        font-family: 'Geist Mono', monospace;
+        font-size: 10px;
+        color: var(--whisper);
+        margin-top: 6px;
+        letter-spacing: 0.04em;
       }
-      .bh-fight::after {
+
+      .rp-vs {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+      }
+      .rp-vs-text {
+        font-family: 'Instrument Serif', serif;
+        font-style: italic;
+        font-size: 28px;
+        color: var(--ink);
+        position: relative;
+        padding: 0 4px;
+      }
+      .rp-vs-text::after {
         content: "";
         position: absolute;
-        bottom: 0.06em;
-        left: -0.02em;
-        right: -0.02em;
-        height: 0.18em;
+        bottom: 4px; left: -4px; right: -4px;
+        height: 8px;
         background: var(--accent-yellow);
         z-index: -1;
         transform: skew(-8deg);
       }
 
-      .big-deck {
+      .rp-topic {
         font-family: 'Geist', sans-serif;
-        font-size: clamp(15px, 1.5vw, 17px);
-        font-weight: 400;
-        line-height: 1.5;
+        font-size: 14px;
         color: var(--ink-quiet);
-        max-width: 48ch;
-        margin: 24px auto 0;
+        margin: 0 0 28px;
+        transition: opacity 0.35s ease;
+        display: inline-flex;
+        gap: 8px;
+        align-items: baseline;
+        flex-wrap: wrap;
+        justify-content: center;
+      }
+      .rp-topic.is-flipping { opacity: 0; }
+      .rp-topic-label {
+        font-family: 'Geist Mono', monospace;
+        font-size: 10px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--whisper);
+      }
+      .rp-topic-text {
+        font-family: 'Instrument Serif', serif;
+        font-size: 18px;
+        color: var(--ink);
+      }
+      .rp-topic-text em { font-style: italic; }
+
+      .rp-actions {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 28px;
+        flex-wrap: wrap;
+        margin-bottom: 24px;
+      }
+      .rp-start {
+        background: var(--ink);
+        color: var(--bg);
+        border: 2px solid var(--ink);
+        padding: 16px 32px;
+        font-family: 'Geist', sans-serif;
+        font-size: 15px;
+        font-weight: 600;
         letter-spacing: -0.005em;
+        cursor: pointer;
+        border-radius: 100px;
+        box-shadow: 4px 4px 0 var(--accent);
+        transition: transform 0.15s, box-shadow 0.15s;
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .rp-start:hover {
+        transform: translate(-2px, -2px);
+        box-shadow: 6px 6px 0 var(--accent);
+      }
+      .rp-arrow { font-size: 16px; transition: transform 0.15s; }
+      .rp-start:hover .rp-arrow { transform: translateX(3px); }
+      .rp-pick {
+        background: none; border: none; padding: 6px 0;
+        cursor: pointer;
+        font-family: 'Geist Mono', monospace;
+        font-size: 11px;
+        font-weight: 500;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--mid);
+        text-decoration: underline;
+        text-decoration-thickness: 1px;
+        text-underline-offset: 4px;
+        transition: color 0.15s;
+      }
+      .rp-pick:hover { color: var(--ink); }
+
+      .rp-dots {
+        display: flex;
+        justify-content: center;
+        gap: 6px;
+        margin-bottom: 8px;
+      }
+      .rp-dot {
+        width: 5px; height: 5px;
+        border-radius: 50%;
+        background: rgba(20,17,13,0.18);
+        transition: background 0.3s, transform 0.3s;
+      }
+      .rp-dot.is-active {
+        background: var(--accent);
+        transform: scale(1.4);
+      }
+
+      @media (max-width: 640px) {
+        .arrival-v2 { padding: 32px 20px 60px; }
+        .arrival-v2-deck-2 { margin-bottom: 36px; }
+        .rotating-pair { grid-template-columns: 1fr; gap: 16px; max-width: 280px; }
+        .rp-card-a, .rp-card-b { transform: none; }
+        .rotating-pair:hover .rp-card-a, .rotating-pair:hover .rp-card-b { transform: translate(-2px, -3px); }
+        .rp-actions { flex-direction: column; gap: 16px; }
       }
 
       .mechanics {
