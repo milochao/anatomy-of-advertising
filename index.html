@@ -1018,15 +1018,6 @@ function ArrivalScreen({ warmStarts, thinkerById, onWarmStart, onOpenMap }) {
   const tradA = TRADITIONS[aObj.tradition];
   const tradB = TRADITIONS[bObj.tradition];
 
-  function handleStartFight() {
-    onWarmStart(current.a, current.b, current.topic, null);
-  }
-
-  function handleManualPick(e) {
-    e.stopPropagation();
-    onOpenMap();
-  }
-
   return (
     <section className="arrival-v2">
       <div className="arrival-v2-inner">
@@ -1041,8 +1032,7 @@ function ArrivalScreen({ warmStarts, thinkerById, onWarmStart, onOpenMap }) {
           A diagnostic tool. Not a search engine.
         </p>
 
-        <div className="rotating-pair" onClick={handleStartFight} role="button" tabIndex={0}
-          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") handleStartFight(); }}>
+        <div className="rotating-pair">
           <div className={`rp-card rp-card-a ${flipping ? "is-flipping" : ""}`} style={{ ['--trad']: tradA.color }}>
             <div className="rp-photo">
               {hasPortrait(aObj) && <img src={portraitURL(aObj.id)} alt="" />}
@@ -1076,12 +1066,9 @@ function ArrivalScreen({ warmStarts, thinkerById, onWarmStart, onOpenMap }) {
         </div>
 
         <div className="rp-actions">
-          <button className="rp-start" onClick={handleStartFight}>
-            Start this fight
+          <button className="rp-start" onClick={onOpenMap}>
+            Choose your two
             <span className="rp-arrow">→</span>
-          </button>
-          <button className="rp-pick" onClick={handleManualPick}>
-            Or pick your own two
           </button>
         </div>
 
