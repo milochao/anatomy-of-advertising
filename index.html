@@ -129,7 +129,7 @@ const THINKERS = [
     bio:"Motivation research applied Freud to consumer behavior. The cake mix and add-an-egg story is largely apocryphal. Food chemistry drove the egg requirement." },
   { id:"packard", first:"Vance", last:"Packard", year:"1957", col:"y1957", tradition:"unconscious",
     bio:"The Hidden Persuaders, 1957. Public panic. Congressional hearings. The industry retreated from Dichter not because the work failed, but because the public found it monstrous." },
-  { id:"gossage", first:"Howard", last:"Gossage", year:"1960s", col:"y1964", tradition:"unconscious", offsetY:80,
+  { id:"gossage", first:"Howard", last:"Gossage", year:"1960s", col:"y1964", tradition:"unconscious", offsetY:45,
     bio:"Argued advertising should reward the reader, not interrupt them. The patron saint of permission, decades before the term." },
   { id:"damasio", first:"Antonio", last:"Damasio", year:"1994", col:"y1994", tradition:"unconscious", ghost:true,
     bio:"Descartes' Error, 1994. Elliot's meningioma case proved emotion is necessary for rational decision. Phineas Gage is folklore. Elliot is the clinical proof." },
@@ -142,7 +142,7 @@ const THINKERS = [
     bio:"Repeat Buying, 1972. ATR: Awareness, Trial, Reinforcement. Light buyers drive growth, not loyalists. Empirical, not theoretical." },
   { id:"sharp", first:"Byron", last:"Sharp", year:"2010", col:"y2010", tradition:"empirical", interchange:true,
     bio:"Argues against meaningful differentiation and for distinctiveness. CEPs trigger occasions. DBAs fire when those occasions arise. Mental availability over preference." },
-  { id:"romaniuk", first:"Jenni", last:"Romaniuk", year:"2012", col:"y2011", tradition:"empirical", offsetY:80,
+  { id:"romaniuk", first:"Jenni", last:"Romaniuk", year:"2012", col:"y2011", tradition:"empirical", offsetY:45,
     bio:"Ehrenberg-Bass Institute, 2012. Codified the visual and verbal signals the brand owns. Made Sharp's argument operational for the planner's toolkit." },
   { id:"binetfield", first:"Binet", last:"& Field", year:"2013", col:"y2013", tradition:"empirical", bridgeTo:"emotional",
     bio:"IPA Databank work, 2013. Long-term emotional building plus short-term activation. The 60/40 ratio is a diagnostic baseline, not a universal constant." },
@@ -159,7 +159,7 @@ const THINKERS = [
     bio:"Influence, 1984. Reciprocity, commitment, social proof, authority, liking, scarcity. Behavioral science as a practitioner toolkit." },
   { id:"thaler", first:"Richard", last:"Thaler", year:"2008", col:"y2008", tradition:"behavioral",
     bio:"Nudge, 2008. Default settings as policy lever. Choice architecture as discipline. The behavioral turn made institutional." },
-  { id:"ariely", first:"Dan", last:"Ariely", year:"2008", col:"y2008", tradition:"behavioral", offsetY:80,
+  { id:"ariely", first:"Dan", last:"Ariely", year:"2008", col:"y2008", tradition:"behavioral", offsetY:45,
     bio:"Predictably Irrational, 2008. Made behavioral economics a bestseller. The 2021 data fabrication should be named, not euphemized." },
   { id:"kahneman", first:"Daniel", last:"Kahneman", year:"2011", col:"y2011", tradition:"behavioral",
     bio:"Thinking, Fast and Slow, 2011. Popularised System 1 and System 2. Stanovich and West coined the labels in 2000. Kahneman gave them to the field." },
@@ -1048,6 +1048,12 @@ function MapScreen({ slotA, slotB, hoveredId, hoveredObj, onTap, onHover, onClea
 
   return (
     <section className="map-screen">
+      <div className="map-intro">
+        <p className="map-intro-text">
+          <em>The Anatomy of Advertising</em> maps an argument that's been running since Aristotle. Eight traditions, thirty-two voices. Pick two to set them against each other.
+        </p>
+      </div>
+
       <div className="map-prelude">
         <div className="map-prelude-pill">
           <span className="live-dot"></span>
@@ -1074,6 +1080,18 @@ function MapScreen({ slotA, slotB, hoveredId, hoveredObj, onTap, onHover, onClea
       <div className="map-scroll-hint">
         <span className="scroll-hint-arrow">→</span>
         <span>Scroll right to see all 32</span>
+      </div>
+
+      <div className="map-legend" aria-label="Tradition legend">
+        <div className="map-legend-label">The eight traditions</div>
+        <ul className="map-legend-list">
+          {TRAD_ORDER.map(tradId => (
+            <li key={tradId} className="map-legend-item">
+              <span className="map-legend-swatch" style={{ background: TRADITIONS[tradId].color }}></span>
+              <span className="map-legend-name">{TRADITIONS[tradId].label}</span>
+            </li>
+          ))}
+        </ul>
       </div>
 
       <div className="map-scroll map-svg-wrapper">
@@ -2154,6 +2172,66 @@ function GlobalStyle() {
 
       /* ---- MAP ---- */
       .map-screen { padding: 32px 36px 120px; }
+      .map-intro {
+        max-width: 1280px;
+        margin: 0 auto 24px;
+        padding-bottom: 20px;
+        border-bottom: 1px solid var(--rule);
+      }
+      .map-intro-text {
+        font-family: 'Instrument Serif', serif;
+        font-size: clamp(18px, 1.7vw, 22px);
+        line-height: 1.45;
+        color: var(--ink);
+        margin: 0;
+        max-width: 56ch;
+      }
+      .map-intro-text em {
+        font-style: italic;
+        color: var(--ink);
+      }
+
+      .map-legend {
+        position: fixed;
+        bottom: 24px; left: 24px;
+        z-index: 30;
+        background: var(--paper);
+        border: 1.5px solid var(--ink);
+        border-radius: 8px;
+        padding: 14px 16px;
+        box-shadow: 3px 3px 0 var(--ink);
+        max-width: 240px;
+      }
+      .map-legend-label {
+        font-family: 'Geist Mono', monospace;
+        font-size: 10px; font-weight: 600;
+        letter-spacing: 0.16em; text-transform: uppercase;
+        color: var(--ink);
+        margin-bottom: 10px;
+      }
+      .map-legend-list {
+        list-style: none; padding: 0; margin: 0;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 4px 12px;
+      }
+      .map-legend-item {
+        display: flex; align-items: center; gap: 7px;
+      }
+      .map-legend-swatch {
+        width: 10px; height: 10px;
+        border-radius: 50%;
+        flex: 0 0 auto;
+      }
+      .map-legend-name {
+        font-family: 'Geist', sans-serif;
+        font-size: 11px;
+        color: var(--ink-quiet);
+        line-height: 1.2;
+      }
+      @media (max-width: 900px) {
+        .map-legend { display: none; }
+      }
       .map-prelude {
         display: flex; align-items: center; justify-content: space-between;
         max-width: 1280px; margin: 0 auto 28px;
