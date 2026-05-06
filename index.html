@@ -108,7 +108,7 @@ const THINKERS = [
   { id:"hopkins", first:"Claude", last:"Hopkins", year:"1923", col:"y1923", tradition:"rational",
     bio:"Applied mail-order measurement to FMCG retail brands. Coupons, traceable response, copy testing as discipline. He was not himself a mail-order practitioner. He brought the method into prestige work." },
   { id:"ogilvy", first:"David", last:"Ogilvy", year:"1948", col:"y1948", tradition:"rational", bridgeTo:"emotional",
-    bio:"The Re/Blue split. Reason-why on one side, image on the other. Ogilvy refused to pick. Wrote both. Bridged the two traditions when the field demanded a side." },
+    bio:"The Re/Blue split. Reason-why on one side, image on the other. Ogilvy refused to pick. Wrote both. Bridged the two lenses when the field demanded a side." },
   { id:"reeves", first:"Rosser", last:"Reeves", year:"1959", col:"y1959", tradition:"rational",
     bio:"USP. One claim, hammered, owned. Anacin was a combination analgesic, aspirin plus caffeine plus other compounds. The USP was the formula difference, not just dose." },
 
@@ -124,7 +124,7 @@ const THINKERS = [
     bio:"Lemon, 2019. System 1 thinking applied to brand work. The case against pure rationality made operational for planners and creatives." },
 
   { id:"freud", first:"Sigmund", last:"Freud", year:"1900", col:"y1900", tradition:"unconscious",
-    bio:"The Interpretation of Dreams, 1900. The unconscious as discoverable territory. The intellectual root the rest of the unconscious tradition draws from." },
+    bio:"The Interpretation of Dreams, 1900. The unconscious as discoverable territory. The intellectual root the rest of the unconscious lens draws from." },
   { id:"dichter", first:"Ernest", last:"Dichter", year:"1950", col:"y1950", tradition:"unconscious",
     bio:"Motivation research applied Freud to consumer behavior. The cake mix and add-an-egg story is largely apocryphal. Food chemistry drove the egg requirement." },
   { id:"packard", first:"Vance", last:"Packard", year:"1957", col:"y1957", tradition:"unconscious",
@@ -159,7 +159,7 @@ const THINKERS = [
     bio:"Influence, 1984. Reciprocity, commitment, social proof, authority, liking, scarcity. Behavioral science as a practitioner toolkit." },
   { id:"thaler", first:"Richard", last:"Thaler", year:"2008", col:"y2008", tradition:"behavioral",
     bio:"Nudge, 2008. Default settings as policy lever. Choice architecture as discipline. The behavioral turn made institutional." },
-  { id:"ariely", first:"Dan", last:"Ariely", year:"2008", col:"y2008", tradition:"behavioral", offsetY:45,
+  { id:"ariely", first:"Dan", last:"Ariely", year:"2008", col:"y2010", tradition:"behavioral", offsetY:45,
     bio:"Predictably Irrational, 2008. Made behavioral economics a bestseller. The 2021 data fabrication should be named, not euphemized." },
   { id:"kahneman", first:"Daniel", last:"Kahneman", year:"2011", col:"y2011", tradition:"behavioral",
     bio:"Thinking, Fast and Slow, 2011. Popularised System 1 and System 2. Stanovich and West coined the labels in 2000. Kahneman gave them to the field." },
@@ -1098,7 +1098,7 @@ function MapScreen({ slotA, slotB, hoveredId, hoveredObj, onTap, onHover, onClea
     <section className="map-screen">
       <div className="map-intro">
         <p className="map-intro-text">
-          <em>The Anatomy of Advertising</em> maps an argument that's been running since Aristotle. Eight traditions, thirty-two voices. Pick two to set them against each other.
+          <em>The Anatomy of Advertising</em> maps an argument that's been running since Aristotle. Eight lenses, thirty-two voices. Pick two to set them against each other.
         </p>
       </div>
 
@@ -1130,8 +1130,8 @@ function MapScreen({ slotA, slotB, hoveredId, hoveredObj, onTap, onHover, onClea
         <span>Scroll right to see all 32</span>
       </div>
 
-      <div className="map-legend" aria-label="Tradition legend">
-        <div className="map-legend-label">The eight traditions</div>
+      <div className="map-legend" aria-label="Lens legend">
+        <div className="map-legend-label">The eight lenses</div>
         <ul className="map-legend-list">
           {TRAD_ORDER.map(tradId => (
             <li key={tradId} className="map-legend-item">
