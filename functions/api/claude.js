@@ -80,10 +80,10 @@ export async function onRequestPost({ request, env }) {
 
   // Force the model and max_tokens server-side. Client cannot escalate.
   const allowedModels = new Set([
-    "claude-sonnet-4-20250514",
+    "claude-sonnet-4-6",
     "claude-haiku-4-5-20251001",
   ]);
-  const model = allowedModels.has(body.model) ? body.model : "claude-sonnet-4-20250514";
+  const model = allowedModels.has(body.model) ? body.model : "claude-sonnet-4-6";
   const maxTokens = Math.min(parseInt(body.max_tokens || 1500, 10), 2500);
 
   const upstream = await fetch("https://api.anthropic.com/v1/messages", {
