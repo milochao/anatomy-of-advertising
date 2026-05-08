@@ -335,12 +335,12 @@ function AnatomyOfAdvertising() {
     }
   }
 
-  async function callClaude(prompt, maxTokens = 1500) {
+  async function callClaude(prompt, maxTokens = 1500, model = "claude-sonnet-4-6") {
     const res = await fetch("/api/claude", {
       method:"POST",
       headers:{ "Content-Type":"application/json" },
       body: JSON.stringify({
-        model:"claude-sonnet-4-20250514",
+        model: model,
         max_tokens: maxTokens,
         messages:[{ role:"user", content: prompt }],
       }),
@@ -435,7 +435,7 @@ Return JSON only. Schema:
 { "engages": true | false, "reason": "one short sentence" }`;
 
     try {
-      const verdict = await callClaude(refPrompt, 200);
+      const verdict = await callClaude(refPrompt, 200, "claude-haiku-4-5-20251001");
       if (verdict.engages) return turn;
 
       const speaker2 = speakerKey === "A" ? aObj : bObj;
@@ -560,7 +560,7 @@ Return JSON only. No preamble. No fences. Schema:
 A: ${slotAObj.first} ${slotAObj.last}. ${slotAObj.bio}
 B: ${slotBObj.first} ${slotBObj.last}. ${slotBObj.bio}
 
-Return JSON only. Schema: { "topic": "the topic" }`, 200);
+Return JSON only. Schema: { "topic": "the topic" }`, 200, "claude-haiku-4-5-20251001");
         topicPhrase = t.topic;
       } catch (e) {
         topicPhrase = "their most productive disagreement";
