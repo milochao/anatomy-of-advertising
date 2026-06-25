@@ -442,14 +442,21 @@ function AnatomyOfAdvertising() {
     }
     const data = await res.json();
     const text = data.content.filter(b=>b.type==="text").map(b=>b.text).join("");
-    let clean = text.replace(/```json/g,"").replace(/```/g,"").trim();
-    // If there is leading/trailing text around the JSON, extract the outermost {...} block.
+    let clean = text.replace(/```json/gi,"").replace(/```/g,"").trim();
+    // Prefer a JSON object if the model returned one, even wrapped in prose.
     const firstBrace = clean.indexOf("{");
     const lastBrace = clean.lastIndexOf("}");
     if (firstBrace >= 0 && lastBrace > firstBrace) {
-      clean = clean.slice(firstBrace, lastBrace + 1);
+      try { return JSON.parse(clean.slice(firstBrace, lastBrace + 1)); }
+      catch (e) { /* fall through to prose handling below */ }
     }
-    return JSON.parse(clean);
+    // No parseable JSON. The model returned prose, sometimes led by a stage
+    // direction like *leans forward*. Strip those and return it as a turn body
+    // so a single non-JSON reply does not abort the whole exchange.
+    let body = clean.replace(/\*[^*\n]+\*/g, "");
+    body = body.replace(/^[\s*"'`]+|[\s*"'`]+$/g, "");
+    body = body.replace(/[ \t]{2,}/g, " ").trim();
+    return { text: body || clean };
   }
 
   function transcriptText(turns, aObj, bObj) {
@@ -626,7 +633,7 @@ A: ${slotAObj.first} ${slotAObj.last}. ${slotAObj.bio}
 B: ${slotBObj.first} ${slotBObj.last}. ${slotBObj.bio}
 
 Return JSON only. Schema: { "topic": "the topic" }`, 200, "claude-haiku-4-5-20251001");
-        topicPhrase = t.topic;
+        topicPhrase = t.topic || "their most productive disagreement";
       } catch (e) {
         topicPhrase = "their most productive disagreement";
       }
