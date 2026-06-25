@@ -9,9 +9,9 @@
 <script crossorigin src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;1,9..144,400&family=JetBrains+Mono:wght@400;500&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&family=Fraunces:ital,opsz,wght@0,9..144,100..900;1,9..144,100..900&family=JetBrains+Mono:wght@400;500&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Roboto+Flex:opsz,wdth,wght@8..144,25..151,100..1000&display=swap" rel="stylesheet">
 <style>
-  html, body { margin: 0; padding: 0; background: #F5F1E8; }
+  html, body { margin: 0; padding: 0; background: #ffffff; }
 </style>
 </head>
 <body>
@@ -172,6 +172,87 @@ const BRIDGES = [
   { fromTrad:"ethics",   toTrad:"unconscious", col:"y1929" },
   { fromTrad:"emotional",toTrad:"empirical", col:"y2013" },
 ];
+
+// ---------------------------------------------------------------------------
+// DOSSIERS: the deep, sourced argue-from material per figure, keyed by id.
+// Only the speaking content lives here. Build-time provenance (verification
+// logs, page offsets, confidence notes) stays out of the runtime prompt: it
+// is audit scaffolding for the author, not material the figure argues from.
+//
+// Shape:
+//   id: {
+//     position:    "1-3 sentences. The speakable claim, in their frame.",
+//     howArgue:    ["how they reason / what they reach for", ...],
+//     vocabulary:  ["term", "term", ...],
+//     quotes:      ["verbatim line — Source, p.X", ...],  // VERIFIED only. Empty until checked.
+//     corrections: "locked facts the voice must not get wrong"
+//   }
+//
+// Any figure WITHOUT an entry here falls back to its bio automatically, so
+// nothing breaks. Entries are added as real advertising dossiers are built.
+// `quotes` stays empty until a line is verified verbatim against the source
+// page (never paraphrased from memory) — that is what beats a plain model run.
+const DOSSIERS = {
+  // Worked example. Assembled only from the sourced Sharp dossier and the
+  // course's locked corrections. quotes is empty: no verbatim line is
+  // verified yet, and an unverified quote is worse than none.
+  sharp: {
+    position: "Brand growth follows predictable patterns across categories and decades. Bigger brands have more buyers, not more loyal buyers. Mental and physical availability drive growth. The job is distinctiveness, not differentiation.",
+    howArgue: [
+      "Argue from data replicated across categories and countries, not from theory or opinion.",
+      "Name the regularity: Double Jeopardy, the duplication of purchase law, the Dirichlet model.",
+      "Treat what people actually bought, over years, as the only witness worth trusting.",
+      "Push back hard on loyalty programs and differentiation as growth drivers.",
+    ],
+    vocabulary: ["penetration", "mental availability", "physical availability", "Category Entry Points", "Distinctive Brand Assets", "Double Jeopardy", "light buyers"],
+    quotes: [],
+    corrections: "You argue against meaningful differentiation and for distinctiveness. Category Entry Points trigger buying occasions; Distinctive Brand Assets fire when those occasions arise. Ehrenberg's Repeat Buying is 1972. Mental and physical availability is your synthesis of the Ehrenberg lineage, not yours alone.",
+  },
+};
+
+// Build the figure's block for the prompt. Rich block if a dossier exists,
+// otherwise the bio (so un-built figures still work).
+function dossierBlock(obj) {
+  const d = DOSSIERS[obj.id];
+  if (!d) {
+    return `${obj.first} ${obj.last} (${obj.year}). ${obj.bio}`;
+  }
+  const parts = [
+    `${obj.first} ${obj.last} (${obj.year}).`,
+    `POSITION: ${d.position}`,
+  ];
+  if (d.howArgue && d.howArgue.length) parts.push(`HOW YOU ARGUE:\n- ${d.howArgue.join("\n- ")}`);
+  if (d.vocabulary && d.vocabulary.length) parts.push(`YOUR VOCABULARY: ${d.vocabulary.join("; ")}`);
+  if (d.quotes && d.quotes.length) parts.push(`YOUR OWN WORDS (use verbatim when it fits, never misattribute):\n- ${d.quotes.join("\n- ")}`);
+  if (d.corrections) parts.push(`FACTS YOU MUST NOT GET WRONG: ${d.corrections}`);
+  return parts.join("\n");
+}
+
+// The static debate context. Identical across every turn of one exchange, so
+// it is sent as a single cached block (cache_control: ephemeral). The figure
+// being spoken on a given turn is named in the per-turn user message, not
+// here, so this prefix never changes mid-debate and stays a cache hit.
+function debateContext(aObj, bObj) {
+  const text = [
+    `You are role-playing a debate between two figures from advertising history. On each turn you will be told which one you are speaking as.`,
+    ``,
+    `FIGURE A is ${aObj.first} ${aObj.last}.`,
+    dossierBlock(aObj),
+    ``,
+    `FIGURE B is ${bObj.first} ${bObj.last}.`,
+    dossierBlock(bObj),
+    ``,
+    `VOICE RULES (apply to whichever figure you are this turn):`,
+    `- Speak in that figure's voice, sounding like they would actually sound.`,
+    `- Practitioner register. Short declarative sentences. No hedging.`,
+    `- Concrete reference to your ideas, methods, work, or examples.`,
+    `- No pleasantries. No "I would argue." No academic puff. No em dashes.`,
+    `- Do not summarize the topic. Speak.`,
+    `- Return JSON only. No preamble. No fences. Schema: { "text": "your turn" }`,
+  ].join("\n");
+  return [{ type: "text", text, cache_control: { type: "ephemeral" } }];
+}
+
 
 const WARM_STARTS = [
   { a:"hopkins", b:"pollitt", topic:"what research should do" },
@@ -335,7 +416,7 @@ function AnatomyOfAdvertising() {
     }
   }
 
-  async function callClaude(prompt, maxTokens = 1500, model = "claude-sonnet-4-6") {
+  async function callClaude(prompt, maxTokens = 1500, model = "claude-sonnet-4-6", system = null) {
     const res = await fetch("/api/claude", {
       method:"POST",
       headers:{ "Content-Type":"application/json" },
@@ -343,6 +424,7 @@ function AnatomyOfAdvertising() {
         model: model,
         max_tokens: maxTokens,
         messages:[{ role:"user", content: prompt }],
+        ...(system ? { system } : {}),
       }),
     });
     if (res.status === 429) {
@@ -383,31 +465,21 @@ function AnatomyOfAdvertising() {
     const opponent = speakerKey === "A" ? bObj : aObj;
     const prior = transcriptText(priorTurns, aObj, bObj);
 
+    // Static across every turn of this exchange -> cached prefix.
+    const system = debateContext(aObj, bObj);
+
     const openingInstruction = isOpening
       ? `You are opening the exchange. Stake out your position on the topic in 2 to 3 sentences. Make a claim concrete enough that ${opponent.last} can disagree with it.`
       : `Respond directly to what ${opponent.last} just said. Engage with their specific claim. Concede what you must. Hold what you can. 2 to 4 sentences.`;
 
-    const prompt = `You are speaking as ${speaker.first} ${speaker.last} (${speaker.year}), in conversation with ${opponent.first} ${opponent.last} (${opponent.year}).
+    // Dynamic only -> sits after the cache breakpoint.
+    const prompt = `TOPIC: ${topic}
 
-YOUR POSITION: ${speaker.bio}
-THEIR POSITION: ${opponent.bio}
-TOPIC: ${topic}
+${prior ? `THE EXCHANGE SO FAR:\n${prior}\n\n` : ''}You are now speaking as ${speaker.first} ${speaker.last}.
 
-${prior ? `THE EXCHANGE SO FAR:\n${prior}\n\n` : ''}NOW IT IS YOUR TURN.
+${openingInstruction}`;
 
-${openingInstruction}
-
-Voice rules:
-- In the voice of ${speaker.last}, sounding like they would actually sound.
-- Practitioner register. Short declarative sentences. No hedging.
-- Concrete reference to your ideas, methods, work, or examples.
-- No pleasantries. No "I would argue." No academic puff. No em dashes.
-- Do not summarize the topic. Speak.
-
-Return JSON only. No preamble. No fences. Schema:
-{ "text": "your turn" }`;
-
-    const result = await callClaude(prompt, 600);
+    const result = await callClaude(prompt, 600, "claude-sonnet-4-6", system);
     return { speaker: speakerKey, text: result.text };
   }
 
@@ -438,25 +510,18 @@ Return JSON only. Schema:
       const verdict = await callClaude(refPrompt, 200, "claude-haiku-4-5-20251001");
       if (verdict.engages) return turn;
 
-      const speaker2 = speakerKey === "A" ? aObj : bObj;
-      const opponent2 = speakerKey === "A" ? bObj : aObj;
       const prior = transcriptText(priorTurns, aObj, bObj);
-      const fixPrompt = `You are speaking as ${speaker2.first} ${speaker2.last} (${speaker2.year}), in conversation with ${opponent2.first} ${opponent2.last}.
-
-YOUR POSITION: ${speaker2.bio}
-THEIR POSITION: ${opponent2.bio}
-TOPIC: ${topic}
+      const system = debateContext(aObj, bObj);
+      const fixPrompt = `TOPIC: ${topic}
 
 THE EXCHANGE SO FAR:
 ${prior}
 
-NOW IT IS YOUR TURN.
+You are now speaking as ${speaker.first} ${speaker.last}.
 
-You must respond to ${opponent2.last}'s most recent point directly. Quote a phrase from it. Disagree with it specifically. Do not restate your existing position. Do not change the subject. 2 to 4 sentences. No em dashes. No academic puff.
+You must respond to ${opponent.last}'s most recent point directly. Quote a phrase from it. Disagree with it specifically. Do not restate your existing position. Do not change the subject. 2 to 4 sentences.`;
 
-Return JSON only. Schema: { "text": "your turn" }`;
-
-      const fixed = await callClaude(fixPrompt, 600);
+      const fixed = await callClaude(fixPrompt, 600, "claude-sonnet-4-6", system);
       return { speaker: speakerKey, text: fixed.text };
     } catch (e) {
       return turn;
@@ -661,28 +726,16 @@ Return JSON only. Schema: { "topic": "the topic" }`, 200, "claude-haiku-4-5-2025
           ? `OPEN with a position that directly addresses what the prior round revealed you needed to address: "${speakerOpenGround}". Do not rehash your stock position. Engage the open ground.`
           : `Respond to ${opponent.last}'s last turn. Where relevant, address the open ground from the prior round: "${speakerOpenGround}".`;
 
-        const turnPrompt = `You are speaking as ${speaker.first} ${speaker.last} (${speaker.year}), in conversation with ${opponent.first} ${opponent.last}.
-
-YOUR POSITION: ${speaker.bio}
-THEIR POSITION: ${opponent.bio}
-TOPIC: ${topicPhrase}
+        const system = debateContext(slotAObj, slotBObj);
+        const turnPrompt = `TOPIC: ${topicPhrase}
 
 PRIOR ROUND'S PRESSURE: This is round ${roundCount + 1} on this topic. The prior round scored ${roomCard.roomScore}/100. The referee's note for you: "${speakerOpenGround}"
 
-${prior ? `THE EXCHANGE SO FAR:\n${prior}\n\n` : ''}NOW IT IS YOUR TURN.
+${prior ? `THE EXCHANGE SO FAR:\n${prior}\n\n` : ''}You are now speaking as ${speaker.first} ${speaker.last}.
 
-${constraint}
+${constraint}`;
 
-Voice rules:
-- In the voice of ${speaker.last}.
-- Practitioner register. Short declarative sentences. No hedging.
-- Concrete reference to your work, methods, or examples.
-- No pleasantries. No "I would argue." No academic puff. No em dashes.
-- 2 to 4 sentences.
-
-Return JSON only. Schema: { "text": "your turn" }`;
-
-        const result = await callClaude(turnPrompt, 700);
+        const result = await callClaude(turnPrompt, 700, "claude-sonnet-4-6", system);
         let turn = { speaker: speakerKey, text: result.text };
 
         if (i > 0) {
@@ -781,20 +834,17 @@ Return JSON only. Schema: { "text": "your turn" }`;
     try {
       setLoadingText(`${challengerName} is pushing back on ${defenderName}.`);
       const prior = transcriptText(working, slotAObj, slotBObj);
-      const challengePrompt = `You are speaking as ${challenger.first} ${challenger.last} (${challenger.year}). The host wants you to push back hard on what ${defenderName} just said.
-
-YOUR POSITION: ${challenger.bio}
-THEIR POSITION: ${defender.bio}
-TOPIC: ${exchange.topic}
+      const system = debateContext(slotAObj, slotBObj);
+      const challengePrompt = `TOPIC: ${exchange.topic}
 
 THE EXCHANGE SO FAR:
 ${prior}
 
-Push back. Name the specific weakness in ${defenderName}'s last point. Quote a phrase from it if you must. Be sharp, not rude. 2 to 4 sentences. No em dashes. No academic puff.
+You are now speaking as ${challenger.first} ${challenger.last}. The host wants you to push back hard on what ${defenderName} just said.
 
-Return JSON only. Schema: { "text": "your push-back" }`;
+Push back. Name the weakness in ${defenderName}'s last point. Quote a phrase from it if you must. Be sharp, not rude. 2 to 4 sentences.`;
 
-      const challengeResult = await callClaude(challengePrompt, 600);
+      const challengeResult = await callClaude(challengePrompt, 600, "claude-sonnet-4-6", system);
       const challengeTurn = { speaker: challengerKey, text: challengeResult.text };
       working = [...working, challengeTurn];
       setExchange({ ...exchange, turns: working });
@@ -850,20 +900,15 @@ Return JSON only. Schema: { "text": "your push-back" }`;
     try {
       setLoadingText(`${target.last} is answering your question.`);
       const prior = transcriptText(working, slotAObj, slotBObj);
-      const answerPrompt = `You are speaking as ${target.first} ${target.last} (${target.year}). The host has just put a question to you in this debate with ${other.last}.
-
-YOUR POSITION: ${target.bio}
-THE OTHER POSITION: ${other.bio}
-TOPIC: ${exchange.topic}
+      const system = debateContext(slotAObj, slotBObj);
+      const answerPrompt = `TOPIC: ${exchange.topic}
 
 THE EXCHANGE SO FAR:
 ${prior}
 
-Answer the host's question directly. In your voice. 2 to 4 sentences. Concrete. No hedging. No em dashes. No academic puff.
+You are now speaking as ${target.first} ${target.last}. The host has just put a question to you. Answer it directly, in your voice. 2 to 4 sentences. Concrete. No hedging.`;
 
-Return JSON only. Schema: { "text": "your answer" }`;
-
-      const answerResult = await callClaude(answerPrompt, 600);
+      const answerResult = await callClaude(answerPrompt, 600, "claude-sonnet-4-6", system);
       const answerTurn = { speaker: targetKey, text: answerResult.text };
       working = [...working, answerTurn];
       setExchange({ ...exchange, turns: working });
@@ -902,7 +947,7 @@ Return JSON only. Schema: { "text": "your answer" }`;
   }
 
   return (
-    <div className="aoa-root">
+    <div className={"aoa-root" + (phase === "arrival" ? " home-white" : "")}>
       <GlobalStyle />
       <Shell phase={phase} onLeave={goArrival} onMap={goMap}>
         {phase === "arrival" && (
@@ -973,7 +1018,7 @@ Return JSON only. Schema: { "text": "your answer" }`;
 function Shell({ phase, onLeave, onMap, children }) {
   return (
     <>
-      <header className="aoa-header">
+      <header className={"aoa-header" + (phase === "arrival" ? " is-arrival" : "")}>
         <button className="aoa-wordmark" onClick={onLeave} aria-label="Return to start">
           <span className="aoa-pulse"></span>
           <span className="aoa-wordmark-text">Anatomy of Advertising</span>
@@ -995,6 +1040,243 @@ function Shell({ phase, onLeave, onMap, children }) {
 // ============================================================
 // ARRIVAL — playful, game-mode
 // ============================================================
+function DotFieldBg() {
+  const canvasRef = useRef(null);
+  const glowRef = useRef(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const glowEl = glowRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d", { alpha: true });
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const TWO_PI = Math.PI * 2;
+
+    // ---- config (DotField, tuned for the cream arrival background) ----
+    const DOT_R = 1.5;      // raise for bolder dots
+    const DOT_SP = 14;
+    const CURSOR_R = 500;
+    const BULGE = 67;
+    const GRAD_FROM = "#111111";
+    const GRAD_TO = "#111111";
+
+    let dots = [];
+    const size = { w: 0, h: 0 };
+    const mouse = { x: -9999, y: -9999, prevX: -9999, prevY: -9999, speed: 0 };
+    let engagement = 0, glowOpacity = 0, frameCount = 0, raf = 0;
+
+    function buildDots(w, h) {
+      const step = DOT_R + DOT_SP;
+      const cols = Math.floor(w / step), rows = Math.floor(h / step);
+      const padX = (w % step) / 2, padY = (h % step) / 2;
+      const arr = new Array(rows * cols); let idx = 0;
+      for (let r = 0; r < rows; r++)
+        for (let c = 0; c < cols; c++) {
+          const ax = padX + c * step + step / 2;
+          const ay = padY + r * step + step / 2;
+          arr[idx++] = { ax, ay, sx: ax, sy: ay };
+        }
+      dots = arr;
+    }
+
+    function doResize() {
+      const rect = canvas.parentElement.getBoundingClientRect();
+      const w = rect.width, h = rect.height;
+      canvas.width = w * dpr; canvas.height = h * dpr;
+      canvas.style.width = w + "px"; canvas.style.height = h + "px";
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      size.w = w; size.h = h;
+      buildDots(w, h);
+    }
+
+    let resizeTimer;
+    function resize() { clearTimeout(resizeTimer); resizeTimer = setTimeout(doResize, 100); }
+
+    function onMouseMove(e) {
+      const rect = canvas.parentElement.getBoundingClientRect();
+      mouse.x = e.clientX - rect.left;
+      mouse.y = e.clientY - rect.top;
+    }
+
+    function updateSpeed() {
+      const dx = mouse.prevX - mouse.x, dy = mouse.prevY - mouse.y;
+      const d = Math.sqrt(dx * dx + dy * dy);
+      mouse.speed += (d - mouse.speed) * 0.5;
+      if (mouse.speed < 0.001) mouse.speed = 0;
+      mouse.prevX = mouse.x; mouse.prevY = mouse.y;
+    }
+
+    function tick() {
+      frameCount++;
+      const w = size.w, h = size.h, len = dots.length;
+      const targetEng = Math.min(mouse.speed / 5, 1);
+      engagement += (targetEng - engagement) * 0.06;
+      if (engagement < 0.001) engagement = 0;
+      const eng = engagement;
+      glowOpacity += (eng - glowOpacity) * 0.08;
+      if (glowEl) {
+        glowEl.setAttribute("cx", mouse.x);
+        glowEl.setAttribute("cy", mouse.y);
+        glowEl.style.opacity = glowOpacity;
+      }
+      ctx.clearRect(0, 0, w, h);
+      const grad = ctx.createLinearGradient(0, 0, w, h);
+      grad.addColorStop(0, GRAD_FROM); grad.addColorStop(1, GRAD_TO);
+      ctx.fillStyle = grad;
+      const cr = CURSOR_R, crSq = cr * cr, rad = DOT_R / 2;
+      ctx.beginPath();
+      for (let i = 0; i < len; i++) {
+        const d = dots[i];
+        const dx = mouse.x - d.ax, dy = mouse.y - d.ay;
+        const distSq = dx * dx + dy * dy;
+        if (distSq < crSq && eng > 0.01) {
+          const dist = Math.sqrt(distSq);
+          const t = 1 - dist / cr;
+          const push = t * t * BULGE * eng;
+          const ang = Math.atan2(dy, dx);
+          d.sx += (d.ax - Math.cos(ang) * push - d.sx) * 0.15;
+          d.sy += (d.ay - Math.sin(ang) * push - d.sy) * 0.15;
+        } else {
+          d.sx += (d.ax - d.sx) * 0.1;
+          d.sy += (d.ay - d.sy) * 0.1;
+        }
+        ctx.moveTo(d.sx + rad, d.sy);
+        ctx.arc(d.sx, d.sy, rad, 0, TWO_PI);
+      }
+      ctx.fill();
+      raf = requestAnimationFrame(tick);
+    }
+
+    doResize();
+    window.addEventListener("resize", resize);
+    window.addEventListener("mousemove", onMouseMove, { passive: true });
+    let ro = null;
+    if (window.ResizeObserver) { ro = new ResizeObserver(resize); ro.observe(canvas.parentElement); }
+
+    function cleanup() {
+      cancelAnimationFrame(raf);
+      clearTimeout(resizeTimer);
+      if (ro) ro.disconnect();
+      window.removeEventListener("resize", resize);
+      window.removeEventListener("mousemove", onMouseMove);
+    }
+
+    const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduce) {
+      const grad = ctx.createLinearGradient(0, 0, size.w, size.h);
+      grad.addColorStop(0, GRAD_FROM); grad.addColorStop(1, GRAD_TO);
+      ctx.fillStyle = grad; ctx.beginPath();
+      const rad = DOT_R / 2;
+      dots.forEach(d => { ctx.moveTo(d.ax + rad, d.ay); ctx.arc(d.ax, d.ay, rad, 0, TWO_PI); });
+      ctx.fill();
+      return cleanup;
+    }
+
+    const speedInterval = setInterval(updateSpeed, 20);
+    raf = requestAnimationFrame(tick);
+
+    return () => { clearInterval(speedInterval); cleanup(); };
+  }, []);
+
+  return (
+    <React.Fragment>
+      <canvas ref={canvasRef} className="dotfield-canvas" aria-hidden="true" />
+      <svg className="dotfield-glow" aria-hidden="true">
+        <defs>
+          <radialGradient id="aoaDotGlow">
+            <stop offset="0%" stopColor="rgba(20,17,13,0.05)" />
+            <stop offset="100%" stopColor="transparent" />
+          </radialGradient>
+        </defs>
+        <circle ref={glowRef} cx="-9999" cy="-9999" r="160" fill="url(#aoaDotGlow)" style={{ opacity: 0, willChange: "opacity" }} />
+      </svg>
+    </React.Fragment>
+  );
+}
+
+function KineticTitle({ text }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const title = ref.current;
+    if (!title) return;
+    const chars = Array.prototype.slice.call(title.querySelectorAll(".kt-char"));
+    const cursor = { x: 0, y: 0 };
+    const mouse = { x: 0, y: 0 };
+    let raf = 0;
+
+    const r0 = title.getBoundingClientRect();
+    mouse.x = cursor.x = r0.left + r0.width / 2;
+    mouse.y = cursor.y = r0.top + r0.height / 2;
+
+    function onMove(e) {
+      const p = e.touches ? e.touches[0] : e;
+      cursor.x = p.clientX; cursor.y = p.clientY;
+    }
+    window.addEventListener("mousemove", onMove, { passive: true });
+    window.addEventListener("touchmove", onMove, { passive: true });
+
+    function getAttr(d, maxD, minV, maxV) {
+      const val = maxV - Math.abs((maxV * d) / maxD);
+      return Math.max(minV, val + minV);
+    }
+
+    const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduce) {
+      chars.forEach(c => { c.style.fontVariationSettings = "'wght' 600, 'wdth' 100"; });
+      return () => {
+        window.removeEventListener("mousemove", onMove);
+        window.removeEventListener("touchmove", onMove);
+      };
+    }
+
+    function tick() {
+      mouse.x += (cursor.x - mouse.x) / 15;
+      mouse.y += (cursor.y - mouse.y) / 15;
+      const tr = title.getBoundingClientRect();
+      const maxDist = Math.max(tr.width, tr.height) / 2;
+      if (maxDist > 0) {
+        for (let i = 0; i < chars.length; i++) {
+          const c = chars[i];
+          const cr = c.getBoundingClientRect();
+          const cx = cr.x + cr.width / 2, cy = cr.y + cr.height / 2;
+          const dx = mouse.x - cx, dy = mouse.y - cy;
+          const d = Math.sqrt(dx * dx + dy * dy);
+          const wght = Math.floor(getAttr(d, maxDist, 100, 900));
+          const wdth = Math.floor(getAttr(d, maxDist, 25, 151));
+          const fvs = "'wght' " + wght + ", 'wdth' " + wdth;
+          if (c._fvs !== fvs) { c.style.fontVariationSettings = fvs; c._fvs = fvs; }
+          const lean = -getAttr(d, maxDist, 0, 12).toFixed(1);
+          if (c._sk !== lean) { c.style.transform = "skewX(" + lean + "deg)"; c._sk = lean; }
+        }
+      }
+      raf = requestAnimationFrame(tick);
+    }
+    raf = requestAnimationFrame(tick);
+
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("touchmove", onMove);
+    };
+  }, []);
+
+  const words = text.split(" ");
+  return (
+    <h1 className="arrival-v2-title kinetic" ref={ref} aria-label={text}>
+      {words.map((w, wi) => (
+        <React.Fragment key={wi}>
+          <span className="kt-word">
+            {w.split("").map((ch, ci) => (
+              <span className="kt-char" key={ci}>{ch}</span>
+            ))}
+          </span>
+          {wi < words.length - 1 ? <span className="kt-space"> </span> : null}
+        </React.Fragment>
+      ))}
+    </h1>
+  );
+}
+
 function ArrivalScreen({ warmStarts, thinkerById, onWarmStart, onOpenMap }) {
   const [pairIndex, setPairIndex] = useState(0);
   const [flipping, setFlipping] = useState(false);
@@ -1020,12 +1302,13 @@ function ArrivalScreen({ warmStarts, thinkerById, onWarmStart, onOpenMap }) {
 
   return (
     <section className="arrival-v2">
+      <DotFieldBg />
       <div className="arrival-v2-inner">
-        <h1 className="arrival-v2-title">The Anatomy of Advertising</h1>
+        <KineticTitle text="The Anatomy of Advertising" />
         <p className="arrival-v2-subtitle"><em>Feldwick's argument, made playable.</em></p>
 
         <p className="arrival-v2-deck">
-          Pick two figures from the canon. Pick a topic. Watch them disagree for six rounds. Get a referee's reading on what landed, what got dodged, and where each voice strayed from the record.
+          Pick two figures from the canon. Pick a topic. Let them argue it out over six rounds. Get a referee's reading on what landed, what got dodged, and where each voice strayed from the record.
         </p>
 
         <p className="arrival-v2-deck-2">
@@ -1190,7 +1473,7 @@ function MapScreen({ slotA, slotB, hoveredId, hoveredObj, onTap, onHover, onClea
                         <circle cx={s.x} cy={s.y} r={portraitR} />
                       </clipPath>
                     </defs>
-                    <circle cx={s.x} cy={s.y} r={portraitR} fill="#F5F1E8" clipPath={`url(#${clipId})`} />
+                    <circle cx={s.x} cy={s.y} r={portraitR} fill="#FFFFFF" clipPath={`url(#${clipId})`} />
                     <image
                       href={portraitURL(s.id)}
                       xlinkHref={portraitURL(s.id)}
@@ -1211,11 +1494,11 @@ function MapScreen({ slotA, slotB, hoveredId, hoveredObj, onTap, onHover, onClea
                     )}
                     {isKind ? (
                       <circle cx={s.x} cy={s.y} r={4}
-                        fill="#F5F1E8" stroke={trad.color}
+                        fill="#FFFFFF" stroke={trad.color}
                         strokeWidth={1} strokeDasharray="2 1.5" opacity={0.85} />
                     ) : (
                       <circle cx={s.x} cy={s.y} r={dotR}
-                        fill={s.ghost ? "#F5F1E8" : "#14110D"}
+                        fill={s.ghost ? "#FFFFFF" : "#14110D"}
                         stroke={s.ghost ? trad.color : "#14110D"}
                         strokeWidth={s.ghost ? 2.5 : 2}
                         strokeDasharray={s.ghost ? "3 2" : undefined} />
@@ -1893,8 +2176,8 @@ function GlobalStyle() {
       body { margin: 0; }
 
       .aoa-root {
-        --bg: #F5F1E8;
-        --bg-warm: #F8F4EC;
+        --bg: #FFFFFF;
+        --bg-warm: #FFFFFF;
         --paper: #FBF8F1;
         --ink: #14110D;
         --ink-quiet: #4A463D;
@@ -1910,9 +2193,7 @@ function GlobalStyle() {
         color: var(--ink);
         min-height: 100vh;
         font-family: 'Geist', system-ui, sans-serif;
-        background-image:
-          radial-gradient(circle at 12% 20%, rgba(255, 77, 46, 0.04) 0%, transparent 40%),
-          radial-gradient(circle at 88% 60%, rgba(45, 91, 255, 0.04) 0%, transparent 45%);
+        background-image: none;
       }
 
       @keyframes pulse {
@@ -1934,7 +2215,7 @@ function GlobalStyle() {
         display: flex; align-items: center; justify-content: space-between;
         padding: 18px 32px;
         position: sticky; top: 0; z-index: 50;
-        background: rgba(245, 241, 232, 0.85);
+        background: rgba(255, 255, 255, 0.85);
         backdrop-filter: blur(10px);
         border-bottom: 1px solid var(--rule);
       }
@@ -2031,6 +2312,39 @@ function GlobalStyle() {
         max-width: 56ch;
       }
       .arrival-v2-foot em { font-style: italic; color: var(--mid); }
+
+      /* white homepage + dot field behind the arrival hero */
+      .aoa-root.home-white { background: #ffffff; background-image: none; }
+      .aoa-header.is-arrival { background: rgba(255,255,255,0.85); border-bottom-color: rgba(20,17,13,0.05); }
+      .arrival-v2 { position: relative; background: #ffffff; }
+      .arrival-v2-inner { position: relative; z-index: 1; }
+      .dotfield-canvas, .dotfield-glow {
+        position: absolute; inset: 0;
+        width: 100%; height: 100%;
+        z-index: 0; pointer-events: none;
+      }
+      /* kinetic title (serif, cursor-driven weight) */
+      .arrival-v2-title.kinetic {
+        font-family: 'Roboto Flex', system-ui, sans-serif;
+        font-weight: 100;
+        font-optical-sizing: auto;
+        text-transform: uppercase;
+        letter-spacing: 0;
+        line-height: 0.96;
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        align-items: baseline;
+        row-gap: 0.02em;
+      }
+      .kt-word { display: inline-flex; white-space: nowrap; }
+      .kt-space { display: inline-block; width: 0.26em; }
+      .kt-char {
+        display: inline-block;
+        font-variation-settings: 'wght' 100, 'wdth' 100;
+        transform: skewX(0deg);
+        will-change: font-variation-settings, transform;
+      }
 
       /* Rotating pair */
       .rotating-pair {
@@ -2340,7 +2654,7 @@ function GlobalStyle() {
         font-family: 'Instrument Serif', serif;
         font-style: italic;
         font-size: 36px;
-        color: rgba(245, 241, 232, 0.7);
+        color: rgba(255, 255, 255, 0.7);
       }
       .card-meta {
         height: 30%;
@@ -2518,7 +2832,7 @@ function GlobalStyle() {
         bottom: 0; left: 0; right: 0;
         z-index: 40;
         padding: 24px 36px 36px;
-        background: linear-gradient(to top, var(--bg) 60%, rgba(245,241,232,0));
+        background: linear-gradient(to top, var(--bg) 60%, rgba(255,255,255,0));
         display: flex; justify-content: center;
         animation: fadeUp 0.5s cubic-bezier(0.2, 0.8, 0.3, 1) both;
       }
