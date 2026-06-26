@@ -386,22 +386,28 @@ function AnatomyOfAdvertising() {
       throw new Error(body.error || `Server error ${res.status}`);
     }
     const data = await res.json();
+    const anchors = (data && data._anchors) ? data._anchors : null;
     const text = data.content.filter(b=>b.type==="text").map(b=>b.text).join("");
     let clean = text.replace(/```json/gi,"").replace(/```/g,"").trim();
     // Prefer a JSON object if the model returned one, even wrapped in prose.
+    let turnObj = null;
     const firstBrace = clean.indexOf("{");
     const lastBrace = clean.lastIndexOf("}");
     if (firstBrace >= 0 && lastBrace > firstBrace) {
-      try { return JSON.parse(clean.slice(firstBrace, lastBrace + 1)); }
-      catch (e) { /* fall through to prose handling below */ }
+      try { turnObj = JSON.parse(clean.slice(firstBrace, lastBrace + 1)); }
+      catch (e) { turnObj = null; }
     }
-    // No parseable JSON. The model returned prose, sometimes led by a stage
-    // direction like *leans forward*. Strip those and return it as a turn body
-    // so a single non-JSON reply does not abort the whole exchange.
-    let body = clean.replace(/\*[^*\n]+\*/g, "");
-    body = body.replace(/^[\s*"'`]+|[\s*"'`]+$/g, "");
-    body = body.replace(/[ \t]{2,}/g, " ").trim();
-    return { text: body || clean };
+    if (!turnObj) {
+      // No parseable JSON. Model returned prose, sometimes led by a stage
+      // direction like *leans forward*. Strip those so one non-JSON reply
+      // does not abort the exchange.
+      let body = clean.replace(/\*[^*\n]+\*/g, "");
+      body = body.replace(/^[\s*"'`]+|[\s*"'`]+$/g, "");
+      body = body.replace(/[ \t]{2,}/g, " ").trim();
+      turnObj = { text: body || clean };
+    }
+    if (anchors) turnObj._anchors = anchors;
+    return turnObj;
   }
 
   function transcriptText(turns, aObj, bObj) {
@@ -430,8 +436,8 @@ ${prior ? `THE EXCHANGE SO FAR:\n${prior}\n\n` : ''}You are now speaking as ${sp
 
 ${openingInstruction}`;
 
-    const result = await callClaude(prompt, 600, "claude-sonnet-4-6", { a: aObj.id, b: bObj.id });
-    return { speaker: speakerKey, text: result.text };
+    const result = await callClaude(prompt, 600, "claude-sonnet-4-6", { a: aObj.id, b: bObj.id, speaker: speaker.id });
+    return { speaker: speakerKey, text: result.text, anchors: result._anchors || null };
   }
 
   async function refereeAndMaybeRegenerate({ turn, speakerKey, aObj, bObj, topic, priorTurns, isOpening }) {
@@ -471,8 +477,8 @@ You are now speaking as ${speaker.first} ${speaker.last}.
 
 You must respond to ${opponent.last}'s most recent point directly. Quote a phrase from it. Disagree with it specifically. Do not restate your existing position. Do not change the subject. 2 to 4 sentences.`;
 
-      const fixed = await callClaude(fixPrompt, 600, "claude-sonnet-4-6", { a: aObj.id, b: bObj.id });
-      return { speaker: speakerKey, text: fixed.text };
+      const fixed = await callClaude(fixPrompt, 600, "claude-sonnet-4-6", { a: aObj.id, b: bObj.id, speaker: speaker.id });
+      return { speaker: speakerKey, text: fixed.text, anchors: fixed._anchors || null };
     } catch (e) {
       return turn;
     }
@@ -684,8 +690,8 @@ ${prior ? `THE EXCHANGE SO FAR:\n${prior}\n\n` : ''}You are now speaking as ${sp
 
 ${constraint}`;
 
-        const result = await callClaude(turnPrompt, 700, "claude-sonnet-4-6", { a: slotAObj.id, b: slotBObj.id });
-        let turn = { speaker: speakerKey, text: result.text };
+        const result = await callClaude(turnPrompt, 700, "claude-sonnet-4-6", { a: slotAObj.id, b: slotBObj.id, speaker: speaker.id });
+        let turn = { speaker: speakerKey, text: result.text, anchors: result._anchors || null };
 
         if (i > 0) {
           setLoadingText(`Checking that ${speaker.last} actually responded.`);
@@ -792,8 +798,8 @@ You are now speaking as ${challenger.first} ${challenger.last}. The host wants y
 
 Push back. Name the weakness in ${defenderName}'s last point. Quote a phrase from it if you must. Be sharp, not rude. 2 to 4 sentences.`;
 
-      const challengeResult = await callClaude(challengePrompt, 600, "claude-sonnet-4-6", { a: slotAObj.id, b: slotBObj.id });
-      const challengeTurn = { speaker: challengerKey, text: challengeResult.text };
+      const challengeResult = await callClaude(challengePrompt, 600, "claude-sonnet-4-6", { a: slotAObj.id, b: slotBObj.id, speaker: challenger.id });
+      const challengeTurn = { speaker: challengerKey, text: challengeResult.text, anchors: challengeResult._anchors || null };
       working = [...working, challengeTurn];
       setExchange({ ...exchange, turns: working });
       setVisibleTurns(working.length);
@@ -855,8 +861,8 @@ ${prior}
 
 You are now speaking as ${target.first} ${target.last}. The host has just put a question to you. Answer it directly, in your voice. 2 to 4 sentences. Concrete. No hedging.`;
 
-      const answerResult = await callClaude(answerPrompt, 600, "claude-sonnet-4-6", { a: slotAObj.id, b: slotBObj.id });
-      const answerTurn = { speaker: targetKey, text: answerResult.text };
+      const answerResult = await callClaude(answerPrompt, 600, "claude-sonnet-4-6", { a: slotAObj.id, b: slotBObj.id, speaker: target.id });
+      const answerTurn = { speaker: targetKey, text: answerResult.text, anchors: answerResult._anchors || null };
       working = [...working, answerTurn];
       setExchange({ ...exchange, turns: working });
       setVisibleTurns(working.length);
@@ -2018,17 +2024,24 @@ function ReportCard({ card, loading, error, slotAObj, slotBObj, tradA, tradB, ro
     ? card.roomScore - priorRoomScore
     : null;
 
+  // Coded, deterministic anchor count. Only figures whose case list lives in
+  // the Worker return anchor data, so this stays empty for figures without one.
+  const anchorAgg = {};
+  (turns || []).forEach(t => {
+    if (t && t.anchors && (t.speaker === "A" || t.speaker === "B")) {
+      const k = t.speaker;
+      if (!anchorAgg[k]) anchorAgg[k] = { hits: new Set(), total: t.anchors.total };
+      (t.anchors.hits || []).forEach(h => anchorAgg[k].hits.add(h));
+    }
+  });
+
   return (
     <section className="report-card" aria-label="Report card">
       <header className="report-card-head">
         <div className="report-card-label">
           {roundCount > 1 ? `Round ${roundCount} · Report card` : "Report card"}
         </div>
-        {delta !== null && (
-          <div className={`report-card-delta ${delta > 0 ? "is-up" : delta < 0 ? "is-down" : "is-flat"}`}>
-            {delta > 0 ? `+${delta}` : delta} from prior round
-          </div>
-        )}
+        {/* round delta removed: small moves on an LLM rubric are noise, not measurement */}
       </header>
 
       <div className="report-card-body">
@@ -2047,6 +2060,29 @@ function ReportCard({ card, loading, error, slotAObj, slotBObj, tradA, tradB, ro
           <FidelityBar thinker={slotBObj} trad={tradB} score={card.voiceFidelityB} note={card.voiceNoteB} />
         </div>
       </div>
+
+      {(anchorAgg.A || anchorAgg.B) && (
+        <div className="report-anchors">
+          <div className="report-block-label">Cases used (coded, not a model score)</div>
+          <div className="report-anchors-rows">
+            {["A", "B"].map(k => {
+              if (!anchorAgg[k]) return null;
+              const obj = k === "A" ? slotAObj : slotBObj;
+              const trad = k === "A" ? tradA : tradB;
+              const used = anchorAgg[k].hits.size;
+              const total = anchorAgg[k].total;
+              const list = Array.from(anchorAgg[k].hits);
+              return (
+                <div className="report-anchor-row" key={k}>
+                  <span className="report-anchor-name" style={{ color: trad.color }}>{obj.last}</span>
+                  <span className="report-anchor-count">{used} of {total} named cases</span>
+                  {list.length > 0 && <span className="report-anchor-list">{list.join(", ")}</span>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {card.moveOfRound && (
         <div className="report-move">
@@ -3716,6 +3752,27 @@ function GlobalStyle() {
         font-family: 'Fraunces', serif; font-style: italic;
         font-size: 14px; line-height: 1.5;
         color: var(--ink);
+      }
+
+      .report-anchors {
+        padding-top: 24px;
+        border-top: 1px solid var(--rule);
+      }
+      .report-anchors-rows { display: grid; gap: 8px; margin-top: 12px; }
+      .report-anchor-row {
+        display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+      }
+      .report-anchor-name {
+        font-family: 'Plus Jakarta Sans', sans-serif;
+        font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+      }
+      .report-anchor-count {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 13px; color: var(--ink); font-weight: 600;
+      }
+      .report-anchor-list {
+        font-family: 'Fraunces', serif; font-style: italic;
+        font-size: 12px; color: var(--mid);
       }
 
       /* ---- CANON SURFER (arrival rail) ---- */
