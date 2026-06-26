@@ -1334,44 +1334,56 @@ export async function onRequestPost({ request, env }) {
   const model = allowedModels.has(body.model) ? body.model : "claude-sonnet-4-6";
   const maxTokens = Math.min(parseInt(body.max_tokens || 1500, 10), 2500);
 
-  const upstream = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model,
-      max_tokens: maxTokens,
-      messages: body.messages || [],
-      // Forward the system field when present. The static debate context
-      // (both figures' dossiers + voice rules) rides here as a cached block,
-      // with its cache_control marker inside. Cache reads are 10% of input
-      // price, so the dossier is charged ~once per debate, not once per turn.
-      ...(systemBlock ? { system: systemBlock } : {}),
-    }),
-  });
-
-  // Stream the upstream response back. Preserve status code so the client
-  // can distinguish 401/429/500 from 200.
-  const text = await upstream.text();
-
-  // If this turn was spoken by a figure with a documented case list, scan the
-  // model's OUTPUT for those cases and attach a deterministic count. The case
-  // lists live only here; the client receives only which cases appeared (all
-  // already visible in the turn) plus the total, never the unused names.
-  let outBody = text;
+  // ---- 5. Call Anthropic, with a soft case-grounding retry on in-range topics ----
   const speaker = body.debatePair && body.debatePair.speaker;
-  if (upstream.ok && speaker && ANCHORS[speaker]) {
+  const topic = body.debatePair && body.debatePair.topic;
+  const caseList = speaker ? ANCHORS[speaker] : null;
+  const inRange = !!(caseList && topicInRange(topic));
+
+  // On in-range topics, nudge the figure (inside the prompt) to ground a point
+  // in its own documented cases. The cases already live in the cached system
+  // block; this adds only a directive to the wire, never a case name. It lifts
+  // the natural hit rate so the paid retry below fires less often.
+  let firstMessages = body.messages || [];
+  if (inRange) {
+    firstMessages = appendReminder(
+      firstMessages,
+      "Reminder: ground at least one point in your own documented cases, by name, before you finish this turn."
+    );
+  }
+
+  const upstream = await callAnthropic(apiKey, model, maxTokens, firstMessages, systemBlock);
+  let text = await upstream.text();
+  let outBody = text;
+
+  if (upstream.ok && caseList) {
     try {
-      const parsed = JSON.parse(text);
-      const contentText = (parsed.content || [])
-        .filter((b) => b && b.type === "text")
-        .map((b) => b.text).join(" ").toLowerCase();
-      const list = ANCHORS[speaker];
-      const hits = list.filter((name) => contentText.includes(name.toLowerCase()));
-      parsed._anchors = { hits, total: list.length };
+      let parsed = JSON.parse(text);
+      let hits = countAnchors(parsed, caseList);
+
+      // Soft retry: only when the topic is in range AND the turn used none of
+      // its own cases. One retry, then take whatever comes back. Out-of-range
+      // topics never retry, so an apt improvised case is never overwritten;
+      // only a skipped-but-relevant case forces the canon.
+      if (inRange && hits.length === 0) {
+        const retryMessages = appendReminder(
+          body.messages || [],
+          "You did not cite any of your own documented cases. Name the specific case from your own work that fits this argument, by name, before you finish. Do not end the turn without it."
+        );
+        const retry = await callAnthropic(apiKey, model, maxTokens, retryMessages, systemBlock);
+        if (retry.ok) {
+          const retryText = await retry.text();
+          try {
+            parsed = JSON.parse(retryText);
+            hits = countAnchors(parsed, caseList);
+            text = retryText;
+          } catch (e) {
+            // retry unparseable: keep the first turn
+          }
+        }
+      }
+
+      parsed._anchors = { hits, total: caseList.length };
       outBody = JSON.stringify(parsed);
     } catch (e) {
       outBody = text;
@@ -1406,5 +1418,52 @@ function json(obj, status = 200) {
       "Content-Type": "application/json",
       "Access-Control-Allow-Origin": "*",
     },
+  });
+}
+
+// ---- Soft anchoring helpers (topic gate + single retry). ----
+
+function topicInRange(topic) {
+  if (!topic || typeof topic !== "string") return false;
+  const t = topic.toLowerCase();
+  const keys = ["measur", "metric", "quantif", "value", "worth", "price", "cost", "efficien", "optimi", "rational", "number", "data", "roi"];
+  return keys.some((k) => t.includes(k));
+}
+
+function countAnchors(parsed, list) {
+  const contentText = (parsed.content || [])
+    .filter((b) => b && b.type === "text")
+    .map((b) => b.text)
+    .join(" ")
+    .toLowerCase();
+  return list.filter((name) => contentText.includes(name.toLowerCase()));
+}
+
+function appendReminder(messages, reminder) {
+  const out = (messages || []).map((m) => ({ ...m }));
+  for (let i = out.length - 1; i >= 0; i--) {
+    if (out[i].role === "user" && typeof out[i].content === "string") {
+      out[i] = { ...out[i], content: out[i].content + "\n\n" + reminder };
+      return out;
+    }
+  }
+  out.push({ role: "user", content: reminder });
+  return out;
+}
+
+async function callAnthropic(apiKey, model, maxTokens, messages, systemBlock) {
+  return fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify({
+      model,
+      max_tokens: maxTokens,
+      messages,
+      ...(systemBlock ? { system: systemBlock } : {}),
+    }),
   });
 }
