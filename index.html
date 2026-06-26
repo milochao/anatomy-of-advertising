@@ -386,7 +386,10 @@ function AnatomyOfAdvertising() {
       return `${who}: ${t.text}`;
     }).filter(Boolean).join("\n\n");
 
-    // FIX 5: Simmons prompt written for a lay reader — stakes first, no assumed knowledge
+    // Card generation: all three fixes applied
+    // A: hard cap 3 sentences / 55 words in prompt + code truncation
+    // B: portrait fetch as blob data URL so SVG blob rendering works
+    // C: topic 36px wrapped at 38 chars; quote wrapped at 28 chars per line
     let columnGraf = "";
     try {
       const res = await fetch("/api/claude", {
@@ -394,7 +397,7 @@ function AnatomyOfAdvertising() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           model: "claude-sonnet-4-6",
-          max_tokens: 400,
+          max_tokens: 200,
           messages: [{
             role: "user",
             content: `You are writing a short column for a LinkedIn card. The audience has never heard of these two people and does not know the topic. Write for a smart general reader, not an insider.
@@ -406,9 +409,13 @@ Winner: ${winnerObj.last}. The move that decided it: "${quote}"
 TRANSCRIPT:
 ${transcript}
 
-Write 4 sentences. Sentence one: what the debate was actually about in plain English — what was at stake for anyone who has ever made an ad or bought one. Sentences two and three: what happened in the room, who landed what, what the loser never answered. Sentence four: the one line that ended it. Short declarative sentences. No em dashes. No academic phrasing. No jargon. If you use a technical term, explain it in the same sentence. Write like a sports columnist who watched the tape and has an opinion.
+HARD LIMIT: exactly 3 sentences, 55 words maximum total. No exceptions.
+Sentence 1: what the debate was actually about in plain English.
+Sentence 2: what happened and what the loser never answered.
+Sentence 3: the one line that ended it, named directly.
+No em dashes. No jargon. Sports columnist register.
 
-Return JSON only. Schema: { "graf": "the column text" }`
+Return JSON only. Schema: { "graf": "exactly 3 sentences under 55 words" }`
           }]
         })
       });
@@ -418,10 +425,12 @@ Return JSON only. Schema: { "graf": "the column text" }`
       const fb = clean.indexOf("{"), lb = clean.lastIndexOf("}");
       if (fb >= 0 && lb > fb) {
         const parsed = JSON.parse(clean.slice(fb, lb + 1));
-        columnGraf = parsed.graf || "";
+        const raw = parsed.graf || "";
+        const sentences = raw.match(/[^.!?]+[.!?]+/g) || [raw];
+        columnGraf = sentences.slice(0, 3).join(" ").trim();
       }
     } catch (e) {
-      columnGraf = `${winnerObj.last} landed the move that mattered. ${loserObj.last} never answered it.`;
+      columnGraf = `${winnerObj.last} landed the move that mattered. ${loserObj.last} never answered it. That silence was the fight.`;
     }
 
     function wrapText(str, maxChars) {
@@ -436,16 +445,27 @@ Return JSON only. Schema: { "graf": "the column text" }`
       return lines;
     }
 
-    // FIX 1: crossOrigin="anonymous" on portrait images so canvas renders them after CORS header
-    async function loadImage(url) {
-      return new Promise((resolve, reject) => {
-        const img = new Image();
-        img.crossOrigin = "anonymous";
-        img.onload = () => resolve(img);
-        img.onerror = () => reject(new Error("Failed: " + url));
-        img.src = url + "?v=" + Date.now();
-      });
+    // FIX B: fetch portraits as blob data URLs — cross-origin <image href> fails in blob-URL SVGs
+    async function fetchPortraitDataURL(url) {
+      try {
+        const r = await fetch(url, { mode: "cors" });
+        if (!r.ok) return null;
+        const blob = await r.blob();
+        return new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = () => resolve(null);
+          reader.readAsDataURL(blob);
+        });
+      } catch (e) { return null; }
     }
+
+    const [winnerDataURL, loserDataURL] = await Promise.all([
+      fetchPortraitDataURL(`https://aoa.milochao.com/portraits/${winnerObj.id}.png`),
+      fetchPortraitDataURL(`https://aoa.milochao.com/portraits/${loserObj.id}.png`),
+    ]);
+    const winnerPortrait = winnerDataURL || `https://aoa.milochao.com/portraits/${winnerObj.id}.png`;
+    const loserPortrait = loserDataURL || `https://aoa.milochao.com/portraits/${loserObj.id}.png`;
 
     async function renderCard(svgString, filename) {
       return new Promise((resolve) => {
@@ -457,7 +477,6 @@ Return JSON only. Schema: { "graf": "the column text" }`
         const blob = new Blob([svgString], { type: "image/svg+xml" });
         const url = URL.createObjectURL(blob);
         const img = new Image();
-        img.crossOrigin = "anonymous";
         img.onload = () => {
           ctx2d.drawImage(img, 0, 0, 1080, 1080);
           canvas.toBlob(pngBlob => {
@@ -474,16 +493,28 @@ Return JSON only. Schema: { "graf": "the column text" }`
       });
     }
 
-    const winnerPortrait = `https://aoa.milochao.com/portraits/${winnerObj.id}.png`;
-    const loserPortrait = `https://aoa.milochao.com/portraits/${loserObj.id}.png`;
-
-    // FIX 2: topic is dynamic from debateTopic, not hardcoded
-    const topicLines = wrapText(debateTopic, 44);
+    // FIX C: topic at 36px wrapped at 38 chars; quote wrapped at 28 chars per line, max 2 lines
+    const topicLines = wrapText(debateTopic, 38);
+    const topicFontSize = 36;
+    const topicLineH = 46;
     const topicSVG = topicLines.map((l, i) =>
-      `<text x="56" y="${104 + i * 56}" fill="#ffffff" font-family="Arial Black, Arial, sans-serif" font-size="46" font-weight="900" letter-spacing="-1.5">${l}</text>`
+      `<text x="56" y="${96 + i * topicLineH}" fill="#ffffff" font-family="Arial Black, Arial, sans-serif" font-size="${topicFontSize}" font-weight="900" letter-spacing="-1">${l}</text>`
     ).join("\n");
-    const topicBlockH = topicLines.length * 56;
-    const ruleY = 144 + topicBlockH;
+    const topicBlockH = topicLines.length * topicLineH;
+    const ruleY = 128 + topicBlockH;
+
+    const quoteWords = `"${quote}"`.split(" ");
+    const quoteLines = [];
+    let qCur = "";
+    quoteWords.forEach(w => {
+      if ((qCur + " " + w).trim().length > 28) { quoteLines.push(qCur.trim()); qCur = w; }
+      else { qCur = (qCur + " " + w).trim(); }
+    });
+    if (qCur) quoteLines.push(qCur.trim());
+    const quoteSVG = quoteLines.slice(0, 2).map((l, i) =>
+      `<text x="56" y="${858 + i * 56}" fill="#ffffff" font-family="Arial Black, Arial, sans-serif" font-size="44" font-weight="900" letter-spacing="-1.5">${l}</text>`
+    ).join("\n");
+    const attributionY = 858 + Math.min(quoteLines.length, 2) * 56;
 
     const card1SVG = `<svg viewBox="0 0 1080 1080" xmlns="http://www.w3.org/2000/svg" width="1080" height="1080">
   <defs>
@@ -512,16 +543,13 @@ Return JSON only. Schema: { "graf": "the column text" }`
   <text x="56" y="776" fill="#ffffff" font-family="Arial Black, Arial, sans-serif" font-size="102" font-weight="900" letter-spacing="-4">${winnerObj.last.toUpperCase()}</text>
   <text x="56" y="812" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="700" letter-spacing="5" opacity="0.4">${winnerTrad.toUpperCase()} · MOVE OF THE ROUND</text>
   <rect x="56" y="832" width="968" height="1" fill="#ffffff" opacity="0.1"/>
-  <text x="56" y="898" fill="#ffffff" font-family="Arial Black, Arial, sans-serif" font-size="48" font-weight="900" letter-spacing="-1.5">"${quote}"</text>
-  <text x="56" y="946" fill="#555555" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="700" letter-spacing="2.5">${winnerObj.last.toUpperCase()}, TURN ${quoteTurn}</text>
+  ${quoteSVG}
+  <text x="56" y="${attributionY}" fill="#555555" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="700" letter-spacing="2.5">${winnerObj.last.toUpperCase()}, TURN ${quoteTurn}</text>
   <rect x="0" y="1018" width="1080" height="62" fill="#000000" opacity="0.7"/>
   <text x="56" y="1055" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="700" letter-spacing="2" opacity="0.3">AOA.MILOCHAO.COM</text>
   <text x="1024" y="1055" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="700" letter-spacing="2" text-anchor="end" opacity="0.3">DEBATE ${String(roundCount).padStart(3,"0")}</text>
 </svg>`;
 
-    // Card 2: white, column graf + open ground
-    // FIX 3: winner name large, loser name small on card 2
-    // FIX 4: loser open ground leads
     const grafLines = wrapText(columnGraf, 50);
     const grafLineH = 28;
     const grafY = 300;
@@ -582,7 +610,6 @@ Return JSON only. Schema: { "graf": "the column text" }`
     }
 
     setCardGenerating(false);
-  }
 
   async function callClaude(prompt, maxTokens = 1500, model = "claude-sonnet-4-6", debatePair = null) {
     const res = await fetch("/api/claude", {
