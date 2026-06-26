@@ -235,6 +235,7 @@ function AnatomyOfAdvertising() {
   const [followUpText, setFollowUpText] = useState("");
   const [starterContext, setStarterContext] = useState(null);
   const [exportFeedback, setExportFeedback] = useState(null);
+  const [cardGenerating, setCardGenerating] = useState(false);
   const [roomCard, setRoomCard] = useState(null);
   const [roomCardError, setRoomCardError] = useState(null);
   const [scoringInFlight, setScoringInFlight] = useState(false);
@@ -359,6 +360,219 @@ function AnatomyOfAdvertising() {
       setExportFeedback("Clipboard not available in this browser");
       setTimeout(() => setExportFeedback(null), 2400);
     }
+  }
+
+  async function generateAndDownloadCards() {
+    if (!exchange || !slotAObj || !slotBObj || !roomCard) return;
+    setCardGenerating(true);
+
+    // Determine winner from move of the round speaker
+    const winnerKey = roomCard.moveOfRound?.speaker || "B";
+    const loserKey = winnerKey === "A" ? "B" : "A";
+    const winnerObj = winnerKey === "A" ? slotAObj : slotBObj;
+    const loserObj = loserKey === "A" ? slotAObj : slotBObj;
+    const quote = roomCard.moveOfRound?.quote || "";
+    const quoteSpeaker = winnerObj.last;
+    const quoteTurn = roomCard.moveOfRound?.turnIndex || "";
+    const openGroundWinner = winnerKey === "A" ? roomCard.openGroundA : roomCard.openGroundB;
+    const openGroundLoser = loserKey === "A" ? roomCard.openGroundA : roomCard.openGroundB;
+    const topic = exchange.topic || "";
+
+    // Generate column graf via Claude
+    const transcript = exchange.turns.map(t => {
+      if (t.speaker === "host") return null;
+      const who = t.speaker === "A" ? slotAObj.last : slotBObj.last;
+      return `${who}: ${t.text}`;
+    }).filter(Boolean).join("\n\n");
+
+    let columnGraf = "";
+    try {
+      const res = await fetch("/api/claude", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-6",
+          max_tokens: 400,
+          messages: [{
+            role: "user",
+            content: `You are writing a short column graf for a LinkedIn card about a debate between ${slotAObj.last} and ${slotBObj.last} on the topic: "${topic}".
+
+The winner is ${winnerObj.last}. The move that decided it: "${quote}"
+
+TRANSCRIPT:
+${transcript}
+
+Write 3-4 sentences in a dry sports-columnist register. Name what happened, who landed what, what the loser never answered. Short declarative sentences. No hedging. No em dashes. No academic phrasing. End on the loser's failure, not the winner's glory.
+
+Return JSON only. Schema: { "graf": "the column text" }`
+          }]
+        })
+      });
+      const data = await res.json();
+      const text = data.content.filter(b => b.type === "text").map(b => b.text).join("");
+      const clean = text.replace(/```json|```/g, "").trim();
+      const firstBrace = clean.indexOf("{");
+      const lastBrace = clean.lastIndexOf("}");
+      if (firstBrace >= 0 && lastBrace > firstBrace) {
+        const parsed = JSON.parse(clean.slice(firstBrace, lastBrace + 1));
+        columnGraf = parsed.graf || "";
+      }
+    } catch (e) {
+      columnGraf = `${winnerObj.last} landed the move that mattered. ${loserObj.last} never answered it.`;
+    }
+
+    // Wrap text for SVG — splits string into lines of maxChars
+    function wrapText(str, maxChars) {
+      const words = str.split(" ");
+      const lines = [];
+      let current = "";
+      words.forEach(w => {
+        if ((current + " " + w).trim().length > maxChars) {
+          lines.push(current.trim());
+          current = w;
+        } else {
+          current = (current + " " + w).trim();
+        }
+      });
+      if (current) lines.push(current.trim());
+      return lines;
+    }
+
+    const winnerPortrait = `https://aoa.milochao.com/portraits/${winnerObj.id}.png`;
+    const loserPortrait = `https://aoa.milochao.com/portraits/${loserObj.id}.png`;
+
+    // Build SVG strings
+    const topicUpper = `ON ${topic.toUpperCase()}`;
+    const quoteLine1 = quote.length > 28 ? `"${quote.slice(0, quote.lastIndexOf(" ", 28))}` : `"${quote}"`;
+    const quoteLine2 = quote.length > 28 ? `${quote.slice(quote.lastIndexOf(" ", 28) + 1)}"` : "";
+    const winnerTrad = (TRADITIONS[winnerObj.tradition] || {}).label || "";
+    const loserTrad = (TRADITIONS[loserObj.tradition] || {}).label || "";
+
+    const grafLines = wrapText(columnGraf, 52);
+    const ogWinnerLines = wrapText(openGroundWinner || "", 52);
+    const ogLoserLines = wrapText(openGroundLoser || "", 52);
+
+    const card1SVG = `<svg viewBox="0 0 1080 1080" xmlns="http://www.w3.org/2000/svg" width="1080" height="1080">
+  <defs>
+    <clipPath id="gc"><rect x="0" y="0" width="1080" height="1080"/></clipPath>
+    <clipPath id="rc"><rect x="680" y="260" width="360" height="380"/></clipPath>
+    <linearGradient id="fb" x1="0" y1="0" x2="0" y2="1"><stop offset="20%" stop-color="#080808" stop-opacity="0"/><stop offset="100%" stop-color="#080808" stop-opacity="1"/></linearGradient>
+    <linearGradient id="fr" x1="0" y1="0" x2="1" y2="0"><stop offset="38%" stop-color="#080808" stop-opacity="0"/><stop offset="100%" stop-color="#080808" stop-opacity="1"/></linearGradient>
+    <linearGradient id="ft" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#080808" stop-opacity="1"/><stop offset="100%" stop-color="#080808" stop-opacity="0"/></linearGradient>
+    <filter id="bw"><feColorMatrix type="saturate" values="0"/></filter>
+    <filter id="bwd"><feColorMatrix type="saturate" values="0"/><feComponentTransfer><feFuncR type="linear" slope="0.3"/><feFuncG type="linear" slope="0.3"/><feFuncB type="linear" slope="0.3"/></feComponentTransfer></filter>
+  </defs>
+  <rect width="1080" height="1080" fill="#080808"/>
+  <image href="${winnerPortrait}" x="-60" y="230" width="860" height="850" clip-path="url(#gc)" filter="url(#bw)" preserveAspectRatio="xMidYMin slice" opacity="0.9"/>
+  <rect x="0" y="230" width="1080" height="850" fill="url(#fr)"/>
+  <rect x="0" y="230" width="1080" height="850" fill="url(#fb)"/>
+  <rect x="0" y="210" width="1080" height="130" fill="url(#ft)"/>
+  <image href="${loserPortrait}" x="694" y="264" width="320" height="360" clip-path="url(#rc)" filter="url(#bwd)" preserveAspectRatio="xMidYMin slice" opacity="0.4"/>
+  <rect x="680" y="258" width="360" height="384" fill="#080808" opacity="0.52"/>
+  <rect x="0" y="0" width="1080" height="5" fill="#ffffff"/>
+  <rect x="0" y="5" width="1080" height="210" fill="#080808"/>
+  <text x="56" y="44" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="700" letter-spacing="4" opacity="0.35">THE ANATOMY OF ADVERTISING</text>
+  <text x="56" y="104" fill="#ffffff" font-family="Arial Black, Arial, sans-serif" font-size="46" font-weight="900" letter-spacing="-1.5">Does repeating a message</text>
+  <text x="56" y="158" fill="#ffffff" font-family="Arial Black, Arial, sans-serif" font-size="46" font-weight="900" letter-spacing="-1.5">build penetration or resistance?</text>
+  <rect x="56" y="188" width="968" height="1" fill="#ffffff" opacity="0.12"/>
+  <text x="1028" y="544" fill="#ffffff" font-family="Arial Black, Arial, sans-serif" font-size="17" font-weight="900" letter-spacing="-0.5" text-anchor="end" opacity="0.28">${loserObj.last.toUpperCase()}</text>
+  <text x="1028" y="562" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="9" font-weight="700" letter-spacing="3" text-anchor="end" opacity="0.16">${loserTrad.toUpperCase()} · ${loserObj.year}</text>
+  <text x="56" y="776" fill="#ffffff" font-family="Arial Black, Arial, sans-serif" font-size="102" font-weight="900" letter-spacing="-4">${winnerObj.last.toUpperCase()}</text>
+  <text x="56" y="812" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="700" letter-spacing="5" opacity="0.4">${winnerTrad.toUpperCase()} · MOVE OF THE ROUND</text>
+  <rect x="56" y="832" width="968" height="1" fill="#ffffff" opacity="0.1"/>
+  <text x="56" y="890" fill="#ffffff" font-family="Arial Black, Arial, sans-serif" font-size="52" font-weight="900" letter-spacing="-2">${quoteLine1}</text>
+  ${quoteLine2 ? `<text x="56" y="948" fill="#ffffff" font-family="Arial Black, Arial, sans-serif" font-size="52" font-weight="900" letter-spacing="-2">${quoteLine2}</text>` : ""}
+  <text x="56" y="${quoteLine2 ? 984 : 948}" fill="#555555" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="700" letter-spacing="2.5">${quoteSpeaker.toUpperCase()}, TURN ${quoteTurn}</text>
+  <rect x="0" y="1018" width="1080" height="62" fill="#000000" opacity="0.7"/>
+  <text x="56" y="1055" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="700" letter-spacing="2" opacity="0.3">AOA.MILOCHAO.COM</text>
+  <text x="1024" y="1055" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="700" letter-spacing="2" text-anchor="end" opacity="0.3">DEBATE ${String(roundCount).padStart(3, "0")}</text>
+</svg>`;
+
+    const grafY = 300;
+    const grafLineH = 28;
+    const grafBlock = grafLines.map((l, i) =>
+      `<text x="56" y="${grafY + i * grafLineH}" fill="#111111" font-family="Arial, Helvetica, sans-serif" font-size="21" letter-spacing="-0.3">${l}</text>`
+    ).join("\n");
+    const afterGraf = grafY + grafLines.length * grafLineH + 32;
+
+    const ogWinnerY = afterGraf + 56;
+    const ogWinnerBlock = ogWinnerLines.map((l, i) =>
+      `<text x="74" y="${ogWinnerY + 26 + i * 26}" fill="#111111" font-family="Arial, Helvetica, sans-serif" font-size="19" letter-spacing="-0.2">${l}</text>`
+    ).join("\n");
+    const afterOgWinner = ogWinnerY + 26 + ogWinnerLines.length * 26 + 28;
+
+    const ogLoserY = afterOgWinner + 24;
+    const ogLoserBlock = ogLoserLines.map((l, i) =>
+      `<text x="74" y="${ogLoserY + 26 + i * 26}" fill="#111111" font-family="Arial, Helvetica, sans-serif" font-size="19" letter-spacing="-0.2">${l}</text>`
+    ).join("\n");
+    const afterOgLoser = ogLoserY + 26 + ogLoserLines.length * 26 + 32;
+
+    const card2SVG = `<svg viewBox="0 0 1080 1080" xmlns="http://www.w3.org/2000/svg" width="1080" height="1080">
+  <rect width="1080" height="1080" fill="#ffffff"/>
+  <rect x="0" y="0" width="1080" height="5" fill="#111111"/>
+  <text x="56" y="50" fill="#111111" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="700" letter-spacing="4" opacity="0.4">THE ANATOMY OF ADVERTISING</text>
+  <line x1="56" y1="64" x2="1024" y2="64" stroke="#111111" stroke-width="0.75"/>
+  <text x="56" y="120" fill="#111111" font-family="Arial Black, Arial, sans-serif" font-size="38" font-weight="900" letter-spacing="-1.5">${slotAObj.last.toUpperCase()}</text>
+  <text x="56" y="152" fill="#bbbbbb" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="700" letter-spacing="5">VS</text>
+  <text x="56" y="200" fill="#111111" font-family="Arial Black, Arial, sans-serif" font-size="38" font-weight="900" letter-spacing="-1.5">${slotBObj.last.toUpperCase()}</text>
+  <line x1="56" y1="222" x2="1024" y2="222" stroke="#111111" stroke-width="0.75"/>
+  <text x="56" y="262" fill="#111111" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="700" letter-spacing="4">THE FIGHT</text>
+  ${grafBlock}
+  <rect x="56" y="${afterGraf}" width="968" height="1" fill="#dddddd"/>
+  <text x="56" y="${afterGraf + 38}" fill="#111111" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="700" letter-spacing="4">WHAT NEITHER SETTLED</text>
+  <rect x="56" y="${ogWinnerY}" width="3" height="${26 + ogWinnerLines.length * 26}" fill="#111111"/>
+  <text x="74" y="${ogWinnerY + 18}" fill="#aaaaaa" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="700" letter-spacing="3">${winnerObj.last.toUpperCase()}</text>
+  ${ogWinnerBlock}
+  <rect x="56" y="${ogLoserY}" width="3" height="${26 + ogLoserLines.length * 26}" fill="#111111"/>
+  <text x="74" y="${ogLoserY + 18}" fill="#aaaaaa" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="700" letter-spacing="3">${loserObj.last.toUpperCase()}</text>
+  ${ogLoserBlock}
+  <rect x="56" y="${afterOgLoser}" width="968" height="1" fill="#dddddd"/>
+  <text x="56" y="${afterOgLoser + 36}" fill="#aaaaaa" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="700" letter-spacing="3">ROOM SCORE</text>
+  <text x="180" y="${afterOgLoser + 36}" fill="#111111" font-family="Arial Black, Arial, sans-serif" font-size="20" font-weight="900" letter-spacing="-0.5">${roomCard.roomScore}</text>
+  <text x="214" y="${afterOgLoser + 36}" fill="#aaaaaa" font-family="Arial, Helvetica, sans-serif" font-size="13" letter-spacing="0"> out of 100.</text>
+  <rect x="0" y="1010" width="1080" height="70" fill="#111111"/>
+  <text x="56" y="1051" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="700" letter-spacing="2" opacity="0.35">AOA.MILOCHAO.COM</text>
+  <text x="1024" y="1051" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="700" letter-spacing="2" text-anchor="end" opacity="0.35">DEBATE ${String(roundCount).padStart(3, "0")}</text>
+</svg>`;
+
+    // Render SVG to PNG and download
+    async function svgToPng(svgString, filename) {
+      return new Promise((resolve) => {
+        const blob = new Blob([svgString], { type: "image/svg+xml" });
+        const url = URL.createObjectURL(blob);
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        img.onload = () => {
+          const canvas = document.createElement("canvas");
+          canvas.width = 1080;
+          canvas.height = 1080;
+          const ctx = canvas.getContext("2d");
+          ctx.fillStyle = "#ffffff";
+          ctx.fillRect(0, 0, 1080, 1080);
+          ctx.drawImage(img, 0, 0, 1080, 1080);
+          canvas.toBlob(pngBlob => {
+            const a = document.createElement("a");
+            a.href = URL.createObjectURL(pngBlob);
+            a.download = filename;
+            a.click();
+            URL.revokeObjectURL(url);
+            resolve();
+          }, "image/png");
+        };
+        img.onerror = () => { URL.revokeObjectURL(url); resolve(); };
+        img.src = url;
+      });
+    }
+
+    try {
+      await svgToPng(card1SVG, `aoa-${winnerObj.id}-vs-${loserObj.id}-card1.png`);
+      await new Promise(r => setTimeout(r, 400));
+      await svgToPng(card2SVG, `aoa-${winnerObj.id}-vs-${loserObj.id}-card2.png`);
+    } catch(e) {
+      console.error("Card export failed:", e);
+    }
+
+    setCardGenerating(false);
   }
 
   async function callClaude(prompt, maxTokens = 1500, model = "claude-sonnet-4-6", debatePair = null) {
@@ -950,6 +1164,8 @@ You are now speaking as ${target.first} ${target.last}. The host has just put a 
             onChangeRoom={changeRoom}
             onLeave={goArrival}
             onExport={exportToMarkdown}
+            onDownloadCards={generateAndDownloadCards}
+            cardGenerating={cardGenerating}
             exportFeedback={exportFeedback}
             roomCard={roomCard}
             roomCardError={roomCardError}
@@ -1735,6 +1951,7 @@ function ExchangeScreen({
   slotAObj, slotBObj, exchange, visibleTurns, loadingText, error,
   followUpFor, followUpText, setFollowUpFor, setFollowUpText, onSubmitFollowUp,
   onContinue, onPushBack, onChangeRoom, onLeave, onExport, exportFeedback,
+  onDownloadCards, cardGenerating,
   roomCard, roomCardError, scoringInFlight, onPushHarder, onNewQuestion, roundCount, priorRoomScore,
 }) {
   const tradA = slotAObj ? TRADITIONS[slotAObj.tradition] : null;
@@ -1872,6 +2089,9 @@ function ExchangeScreen({
               <span className="ctrl-divider" />
               <button className="ctrl ctrl-export" onClick={onExport}>
                 {exportFeedback ? <em>{exportFeedback}</em> : "Take it with you"}
+              </button>
+              <button className="ctrl ctrl-cards" onClick={onDownloadCards} disabled={cardGenerating || !roomCard}>
+                {cardGenerating ? <em>Building cards…</em> : "Download cards"}
               </button>
               <button className="aoa-link aoa-link-quiet" onClick={onChangeRoom}>Change room</button>
             </div>
@@ -3525,6 +3745,10 @@ function GlobalStyle() {
         width: 1px; height: 16px; background: var(--rule-strong);
       }
       .ctrl-export em { font-style: italic; color: var(--mid); }
+      .ctrl-cards { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+      .ctrl-cards:hover { background: var(--ink-quiet); }
+      .ctrl-cards:disabled { opacity: 0.45; cursor: not-allowed; transform: none; box-shadow: 2px 2px 0 var(--ink); }
+      .ctrl-cards em { font-style: italic; }
 
       .followup { animation: fadeUp 0.4s ease both; }
       .followup-label {
