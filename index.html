@@ -714,7 +714,38 @@ You must respond to ${opponent.last}'s most recent point directly. Quote a phras
       return `[turn ${i+1}] ${who}: ${t.text}`;
     }).join("\n\n");
 
-    const prompt = `You are a referee scoring a simulated debate between two figures from advertising history. The simulation is a reconstruction, not direct quotation. Your job is to score two things, in editorial register.
+    // Fetch each figure's own judging standard from the Worker (dossier test fields).
+    // Best-effort: if the call fails, scoring proceeds without per-figure standards.
+    let standardA = null, standardB = null;
+    try {
+      const stdRes = await fetch("/api/claude", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "get_standards", a: aObj.id, b: bObj.id }),
+      });
+      if (stdRes.ok) {
+        const stdData = await stdRes.json();
+        standardA = stdData.standardA || null;
+        standardB = stdData.standardB || null;
+      }
+    } catch (e) { /* proceed without standards */ }
+
+    const perFigureBlock = (standardA || standardB) ? `
+SCORE THREE — PER-FIGURE SCORING. Judge each figure by their own standard, not a neutral rubric.
+
+${standardA ? `${aObj.last.toUpperCase()}'S OWN STANDARD:
+${standardA}
+
+Judge ${aObj.last}'s turns against this standard. Did their arguments survive it? Where did they fall short of their own criteria? One concrete verdict, two sentences maximum.` : ""}
+
+${standardB ? `${bObj.last.toUpperCase()}'S OWN STANDARD:
+${standardB}
+
+Judge ${bObj.last}'s turns against this standard. Did their arguments survive it? Where did they fall short of their own criteria? One concrete verdict, two sentences maximum.` : ""}
+
+Use these per-figure verdicts to sharpen the OPEN GROUND section. The open ground for each figure should name what their own standard would flag as unfinished, not what a neutral observer would note as missing.` : "";
+
+    const prompt = `You are a referee scoring a simulated debate between two figures from advertising history. The simulation is a reconstruction, not direct quotation. Your job is to score three things, in editorial register.
 
 FIGURE A: ${aObj.first} ${aObj.last} (${aObj.year})
 A's documented position and work: ${aObj.bio}
@@ -740,10 +771,10 @@ SCORE TWO — VOICE FIDELITY (0-100 per figure). How close did the reconstructio
 - Did the register match their period and idiom?
 - Were factual claims consistent with what they actually published?
 Score each figure 0-100 independently. Tier-three figures with limited firsthand record will score lower. That is correct and surfaces the disclaimer.
-
+${perFigureBlock}
 MOVE OF THE ROUND: Identify the single sharpest turn in the exchange. Give the turn number, the speaker (A or B), and one sentence on why it landed. Quote a phrase under 12 words from the turn itself.
 
-OPEN GROUND: For each figure, in one sentence, what does their position need to address that this exchange did not? This is the pedagogical payload. Specific. Not generic.
+OPEN GROUND: For each figure, in one sentence, what does their own standard reveal as unfinished in this exchange? If per-figure standards were provided, use them. Be specific. Not generic.
 
 Return JSON only. No preamble. No fences. Schema:
 {
@@ -760,17 +791,19 @@ Return JSON only. No preamble. No fences. Schema:
   "voiceFidelityB": number,
   "voiceNoteA": "one short note on A's reconstruction",
   "voiceNoteB": "one short note on B's reconstruction",
+  "perFigureA": "one sentence verdict on A by their own standard, or null if no standard available",
+  "perFigureB": "one sentence verdict on B by their own standard, or null if no standard available",
   "moveOfRound": {
     "turnIndex": number,
     "speaker": "A or B (one letter)",
     "quote": "phrase from that turn, under 12 words",
     "reason": "one sentence on why it landed"
   },
-  "openGroundA": "one sentence on what A needs to address",
-  "openGroundB": "one sentence on what B needs to address"
+  "openGroundA": "one sentence on what A's own standard would flag as unfinished",
+  "openGroundB": "one sentence on what B's own standard would flag as unfinished"
 }`;
 
-    const result = await callClaude(prompt, 1200);
+    const result = await callClaude(prompt, 1400);
     return result;
   }
 
@@ -2349,6 +2382,26 @@ function ReportCard({ card, loading, error, slotAObj, slotBObj, tradA, tradB, ro
               <div className="report-open-row">
                 <span className="report-open-name" style={{ color: tradB.color }}>{slotBObj.last}</span>
                 <em>{card.openGroundB}</em>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {(card.perFigureA || card.perFigureB) && (
+        <div className="report-per-figure">
+          <div className="report-block-label">By their own standard</div>
+          <div className="report-open-rows">
+            {card.perFigureA && (
+              <div className="report-open-row">
+                <span className="report-open-name" style={{ color: tradA.color }}>{slotAObj.last}</span>
+                <em>{card.perFigureA}</em>
+              </div>
+            )}
+            {card.perFigureB && (
+              <div className="report-open-row">
+                <span className="report-open-name" style={{ color: tradB.color }}>{slotBObj.last}</span>
+                <em>{card.perFigureB}</em>
               </div>
             )}
           </div>
@@ -3961,6 +4014,11 @@ function GlobalStyle() {
       .report-open {
         padding-top: 24px;
         border-top: 1px solid var(--rule);
+      }
+      .report-per-figure {
+        padding-top: 24px;
+        border-top: 1px solid var(--rule);
+        margin-top: 4px;
       }
       .report-open-rows {
         display: grid; gap: 10px;
