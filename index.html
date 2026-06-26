@@ -436,7 +436,7 @@ ${prior ? `THE EXCHANGE SO FAR:\n${prior}\n\n` : ''}You are now speaking as ${sp
 
 ${openingInstruction}`;
 
-    const result = await callClaude(prompt, 600, "claude-sonnet-4-6", { a: aObj.id, b: bObj.id, speaker: speaker.id });
+    const result = await callClaude(prompt, 600, "claude-sonnet-4-6", { a: aObj.id, b: bObj.id, speaker: speaker.id, topic: topic });
     return { speaker: speakerKey, text: result.text, anchors: result._anchors || null };
   }
 
@@ -477,7 +477,7 @@ You are now speaking as ${speaker.first} ${speaker.last}.
 
 You must respond to ${opponent.last}'s most recent point directly. Quote a phrase from it. Disagree with it specifically. Do not restate your existing position. Do not change the subject. 2 to 4 sentences.`;
 
-      const fixed = await callClaude(fixPrompt, 600, "claude-sonnet-4-6", { a: aObj.id, b: bObj.id, speaker: speaker.id });
+      const fixed = await callClaude(fixPrompt, 600, "claude-sonnet-4-6", { a: aObj.id, b: bObj.id, speaker: speaker.id, topic: topic });
       return { speaker: speakerKey, text: fixed.text, anchors: fixed._anchors || null };
     } catch (e) {
       return turn;
@@ -690,7 +690,7 @@ ${prior ? `THE EXCHANGE SO FAR:\n${prior}\n\n` : ''}You are now speaking as ${sp
 
 ${constraint}`;
 
-        const result = await callClaude(turnPrompt, 700, "claude-sonnet-4-6", { a: slotAObj.id, b: slotBObj.id, speaker: speaker.id });
+        const result = await callClaude(turnPrompt, 700, "claude-sonnet-4-6", { a: slotAObj.id, b: slotBObj.id, speaker: speaker.id, topic: exchange.topic });
         let turn = { speaker: speakerKey, text: result.text, anchors: result._anchors || null };
 
         if (i > 0) {
@@ -798,7 +798,7 @@ You are now speaking as ${challenger.first} ${challenger.last}. The host wants y
 
 Push back. Name the weakness in ${defenderName}'s last point. Quote a phrase from it if you must. Be sharp, not rude. 2 to 4 sentences.`;
 
-      const challengeResult = await callClaude(challengePrompt, 600, "claude-sonnet-4-6", { a: slotAObj.id, b: slotBObj.id, speaker: challenger.id });
+      const challengeResult = await callClaude(challengePrompt, 600, "claude-sonnet-4-6", { a: slotAObj.id, b: slotBObj.id, speaker: challenger.id, topic: exchange.topic });
       const challengeTurn = { speaker: challengerKey, text: challengeResult.text, anchors: challengeResult._anchors || null };
       working = [...working, challengeTurn];
       setExchange({ ...exchange, turns: working });
@@ -861,7 +861,7 @@ ${prior}
 
 You are now speaking as ${target.first} ${target.last}. The host has just put a question to you. Answer it directly, in your voice. 2 to 4 sentences. Concrete. No hedging.`;
 
-      const answerResult = await callClaude(answerPrompt, 600, "claude-sonnet-4-6", { a: slotAObj.id, b: slotBObj.id, speaker: target.id });
+      const answerResult = await callClaude(answerPrompt, 600, "claude-sonnet-4-6", { a: slotAObj.id, b: slotBObj.id, speaker: target.id, topic: exchange.topic });
       const answerTurn = { speaker: targetKey, text: answerResult.text, anchors: answerResult._anchors || null };
       working = [...working, answerTurn];
       setExchange({ ...exchange, turns: working });
