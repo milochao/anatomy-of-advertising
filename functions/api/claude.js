@@ -207,14 +207,8 @@ const DOSSIERS = {
       "the repeater — the product must foster its own demand; the incentive is addiction, not cure",
       "caveat emptor as the publisher's alibi — the mechanism by which the medium escapes accountability",
     ],
-    quotes: [
-      "Gullible America will spend this year some seventy-five millions of dollars in the purchase of patent medicines. In consideration of this sum it will swallow huge quantities of alcohol, an appalling amount of opiates and narcotics, a wide assortment of varied drugs ranging from powerful and dangerous heart depressants to insidious liver stimulants; and, far in excess of all other ingredients, undiluted fraud. — The Great American Fraud, Article I (Collier's Weekly, Oct. 7, 1905) ✅",
-      "We see recorded only the favorable results: the unfavorable lie silent. How could it be otherwise when the only avenues of publicity are controlled by the advertisers? — The Great American Fraud, Article I ✅",
-      "Every man who trades in this market, whether he pockets the profits of the maker, the purveyor or the advertiser, takes toll of blood. — The Great American Fraud, Article V ✅",
-      "Silence is the fixed quantity — silence as to the frauds he practices; silence as to the abominable stewings and brewings that enter into his nostrum; silence as to the deaths and sicknesses he causes; silence as to the drug fiends he makes, the inebriate asylums he fills. Silence he must have. So he makes silence a part of the contract. — The Great American Fraud, The Patent Medicine Conspiracy Against the Freedom of the Press ✅",
-      "That is the contract of silence. That is the clause which with forty million dollars, muzzles the press of the country. — The Great American Fraud, The Patent Medicine Conspiracy Against the Freedom of the Press ✅",
-    ],
-    corrections: "Samuel Hopkins Adams the muckraker is not Claude C. Hopkins the adman. They collide in the Liquozone episode: Hopkins built the campaign Adams exposed, and Adams grants Hopkins was not responsible for the basic fraud. Keep them separate. The Great American Fraud is equally a press-capture expose, not only a quack-medicine one. Do not credit Adams alone for the 1906 Pure Food and Drug Act; it followed Adams, Sinclair's The Jungle, and the wider Progressive legislative push. The text in hand is the Project Gutenberg ebook derived from the Collier's Weekly series (1905-06) and the collected book edition; it carries no printed page numbers. Quotes above are cited by article title. The 'faith cure' Adams describes is his term for the mechanism: not the stimulant in the nostrum but the faith inspired by the advertisement does the therapeutic work.",
+    quotes: [],
+    corrections: "Samuel Hopkins Adams the muckraker is not Claude C. Hopkins the adman. They collide in the Liquozone episode: Hopkins built the campaign Adams exposed, and Adams grants Hopkins was not responsible for the basic fraud. Keep them separate. The Great American Fraud is equally a press-capture expose, not only a quack-medicine one. Do not credit Adams alone for the 1906 Pure Food and Drug Act; it followed Adams, Sinclair's The Jungle, and the wider Progressive legislative push.",
   },
   bernays: {
     position: "Propaganda does not sell existing desires. It constructs the desires that make the product necessary. The modern propagandist works upstream of the product, engineering social conditions so that demand arrives in the consumer as their own idea.",
@@ -660,14 +654,8 @@ const DOSSIERS = {
       "consumer's irrational core",
       "consumption as identity work",
     ],
-    quotes: [
-      "Motivational research, the techniques of which are often referred to in this book, is basically applied cultural anthropology. Instead of neglecting the 'why' and the 'how to' problems, it has made those two areas its main concern. — Motivating Human Behavior, p. 2 ✅",
-      "Motivational researchers feel that interpretation of observed behavior needs to go into depth. It is not sufficient to ask the member of a tribe why the tribe has instituted a particular type of initiation rite. More likely than not, he won't know himself. The only honest answer he can give is that they have practiced these ceremonials since time immemorial. — Motivating Human Behavior, p. 2 ✅",
-      "In Handbook of Consumer Motivations: The Psychology of the World of Objects, I tried to draw attention to the fact that in a world of objects, each one of them has a deeper meaning going far beyond its purely utilitarian description. We live in a world of symbols. — Motivating Human Behavior, p. 4 ✅",
-      "Ideally, we may wish that people should never be influenced. The truth is that they are continuously being influenced, and not only by people (parents, teachers, clergymen, friends) but also by the poverty or wealth of their society, and even by their physical environment, the landscape and the climate. — Motivating Human Behavior, p. 4 ✅",
-      "Motivational research concerns itself scientifically with the techniques that permit the advertiser or the communications expert to reach his public in such a way that he achieves his desired results. He can do so only if he learns to develop insight into his public's motivation. — Motivating Human Behavior, p. 79 ✅",
-    ],
-    corrections: "The Betty Crocker 'add an egg' cake-mix story is largely apocryphal, challenged by Schwarzkopf and Tadajewski; food chemistry, not depth psychology, drove the egg. The Marlboro Man belongs to Leo Burnett's agency, not to Dichter. The industry turned away from motivation research after Vance Packard's The Hidden Persuaders (1957) brought public panic and congressional hearings. The primary source in hand is Motivating Human Behavior (McGraw-Hill, 1971), not The Strategy of Desire (Doubleday, 1960) or Motivation in Advertising (McGraw-Hill, 1964); the 1971 book quotes and references both earlier works. The deep symbolic product-meaning claims (convertible as mistress, bathing as guilt-cleansing) derive primarily from the Handbook of Consumer Motivations (1964) and from Dichter's Institute for Motivational Research case work. Depth findings are harder to replicate than surveys; concede replicability questions while defending that the method surfaces real psychological layers surveys miss.",
+    quotes: [],
+    corrections: "The Betty Crocker \"add an egg\" cake-mix story is largely apocryphal, challenged in detail by Schwarzkopf and Tadajewski; food chemistry, not depth psychology, drove the egg. The Marlboro Man belongs to Leo Burnett’s agency, not to you. The industry turned away from motivation research after Vance Packard’s The Hidden Persuaders (1957) brought public panic and congressional hearings, not because the method was procured out. You are the named carrier of motivation research, not the sole author of any one campaign. Depth findings are harder to replicate than surveys; concede that, not that replicability is the right test.",
   },
   gossage: {
     position: "Advertising is a privilege, not a right. The first obligation runs to the audience, not the client. Nobody reads ads — people read what interests them, and sometimes it's an ad. The job is to earn attention, not buy it. A rented stage requires a performance worth watching.",
@@ -1266,6 +1254,94 @@ function buildDebateSystem(aObj, bObj) {
 }
 
 
+// ---- Reflection pass ----
+// Fires a private Haiku call before every non-opening debate turn.
+// Asks the speaker what they would attend to and what a weak response
+// looks like. The output is injected as a hidden directive into the
+// main Sonnet turn — never returned to the client.
+//
+// Detection: a turn is non-opening when the transcript in the user
+// message contains a prior speaker turn (i.e. the exchange has started).
+// We look for the pattern "LASTNAME:" in the prior messages, which the
+// client always includes in the transcript block.
+
+function isNonOpeningTurn(messages) {
+  if (!messages || messages.length === 0) return false;
+  // Find the last user message and check for transcript content
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m.role === "user" && typeof m.content === "string") {
+      return m.content.includes("THE EXCHANGE SO FAR:");
+    }
+  }
+  return false;
+}
+
+function extractLastOpponentTurn(messages, speakerId, aId, bId) {
+  // Pull the last opponent turn text from the transcript block
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m.role !== "user" || typeof m.content !== "string") continue;
+    const match = m.content.match(/THE EXCHANGE SO FAR:\n([\s\S]+?)(?:\n\nYou are now speaking|$)/);
+    if (!match) continue;
+    const transcript = match[1];
+    const lines = transcript.split("\n\n");
+    // Walk backwards to find last turn not by the current speaker
+    const speakerObj = FIGURES[speakerId];
+    const speakerLast = speakerObj ? speakerObj.last.toUpperCase() : "";
+    for (let j = lines.length - 1; j >= 0; j--) {
+      const line = lines[j].trim();
+      if (line && !line.startsWith(speakerLast + ":") && !line.startsWith("HOST")) {
+        // Strip the "LASTNAME: " prefix
+        return line.replace(/^[A-Z &]+:\s*/, "");
+      }
+    }
+  }
+  return null;
+}
+
+async function runReflectionPass(apiKey, speakerId, opponentTurn, systemBlock) {
+  const speakerObj = FIGURES[speakerId];
+  if (!speakerObj || !opponentTurn) return null;
+
+  const d = DOSSIERS[speakerId];
+  const perceive = d && d.perceive ? d.perceive : null;
+  const test = d && d.test ? d.test : null;
+
+  const reflectionPrompt = `You are ${speakerObj.first} ${speakerObj.last}.
+
+Your opponent just said:
+"${opponentTurn}"
+
+${perceive ? `Your eye goes to: ${perceive}` : ""}
+
+Answer two questions privately. Do not argue. Do not write your turn yet. Just think.
+
+1. ATTEND: What one thing in what they said would you actually attend to — the specific claim, example, or framing that is most vulnerable or most worth engaging? Be concrete. Name it.
+
+2. WEAK: What does a weak version of your response look like? What would you say if you defaulted to your stock position without engaging what they just said?
+
+Return JSON only. Schema: { "attend": "one sentence", "weak": "one sentence" }`;
+
+  try {
+    const res = await callAnthropic(
+      apiKey,
+      "claude-haiku-4-5-20251001",
+      200,
+      [{ role: "user", content: reflectionPrompt }],
+      null // no system block needed — the prompt is self-contained
+    );
+    if (!res.ok) return null;
+    const raw = await res.text();
+    const clean = raw.replace(/```json|```/g, "").trim();
+    const fb = clean.indexOf("{"), lb = clean.lastIndexOf("}");
+    if (fb < 0 || lb <= fb) return null;
+    return JSON.parse(clean.slice(fb, lb + 1));
+  } catch (e) {
+    return null; // reflection is best-effort; never block the main turn
+  }
+}
+
 export async function onRequestPost({ request, env }) {
   // ---- 1. Read configuration ----
   const apiKey = env.ANTHROPIC_API_KEY;
@@ -1366,6 +1442,29 @@ export async function onRequestPost({ request, env }) {
       firstMessages,
       "Reminder: ground at least one point in your own documented cases, by name, before you finish this turn."
     );
+  }
+
+  // ---- Reflection pass (non-opening turns only) ----
+  // Private Haiku call that asks the speaker what they attend to and what
+  // a weak response looks like. Output injected as a hidden directive into
+  // the main turn. Never returned to the client. Best-effort: if it fails
+  // or returns nothing useful, the main turn fires unchanged.
+  if (speaker && isNonOpeningTurn(body.messages || [])) {
+    const aId = body.debatePair && body.debatePair.a;
+    const bId = body.debatePair && body.debatePair.b;
+    const opponentTurn = extractLastOpponentTurn(body.messages || [], speaker, aId, bId);
+    if (opponentTurn) {
+      const reflection = await runReflectionPass(apiKey, speaker, opponentTurn, systemBlock);
+      if (reflection && reflection.attend && reflection.weak) {
+        const directive = [
+          `BEFORE YOU SPEAK — your private reflection (do not quote this; let it shape your argument):`,
+          `What you are attending to: ${reflection.attend}`,
+          `What a weak response would look like: ${reflection.weak}`,
+          `Now respond. Engage what you are attending to. Do not give the weak response.`,
+        ].join("\n");
+        firstMessages = appendReminder(firstMessages, directive);
+      }
+    }
   }
 
   const upstream = await callAnthropic(apiKey, model, maxTokens, firstMessages, systemBlock);
