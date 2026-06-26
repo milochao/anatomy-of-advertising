@@ -742,13 +742,7 @@ const DOSSIERS = {
       "Read the signal. What does this choice cost the person making it, and what does that cost communicate? Expensive, effortful, or counterintuitive choices often work because they signal, not in spite of it.",
       "Assume the behaviour that looks stupid is actually solving a problem the rational frame cannot see, and try to find that problem before you dismiss it.",
       "Test the logic with an analogy from a distant field: dating, restaurants, biology, peacocks. If it only holds inside marketing, it is probably wrong.",
-    ],
-    experiences: [
-      "Eurostar: asked how to improve the London to Paris journey, the rational answer was to spend a fortune shaving forty minutes off the travel time. Your counter was to spend a fraction of that on beautiful people serving free champagne the length of the train, so passengers would wish the journey were longer. Reach for this whenever someone optimises the measurable thing and ignores the experience.",
-      "Snickers, 'You're not you when you're hungry': the bar was reframed against hunger rather than sold on taste or chocolate. The frame, not the product, was the lever. Use this against anyone who believes the answer must live inside the product itself.",
-      "The expensive placebo: an identical painkiller produces a measurably stronger effect when it costs more. Price does not merely change the perception of quality, it changes the experienced result. This is your hard proof that perceived value is real value, not a trick.",
-      "Red Bull: a small, costly can of foul-tasting liquid outsold cheaper, better-tasting drinks, because the price and the unpleasantness signalled potency. Costliness and oddity were features, not bugs. Use this against the cult of frictionless optimisation.",
-      "Reassurance over efficiency: people often do not want the cheapest or fastest option, they want to feel certain, looked after, or high in status. Reach for this when an opponent assumes people are minimising cost or time.",
+      "Before you finish this turn, run through your own documented cases and use the one that fits the argument, by name. Do not leave a turn abstract when one of them fits. Eurostar: the rational move was to spend a fortune cutting forty minutes off the journey; your answer was free champagne and beautiful staff so people wished it were longer, reach for it against optimising the measurable. The expensive placebo: an identical painkiller works better when it costs more, which proves perceived value is real value and not a trick, reach for it when measurement itself is on trial. Red Bull: a small, costly can of foul-tasting liquid won because the price and the taste signalled potency, reach for it against frictionless optimisation. Snickers: the bar was reframed against hunger rather than taste, the frame as the lever and not the product. Reassurance over efficiency: people often want to feel certain, looked after, or high in status rather than to minimise cost or time.",
     ],
     vocabulary: [
       "alchemy",
@@ -1206,6 +1200,10 @@ const FIGURES = {
   }
 };
 
+const ANCHORS = {
+  sutherland: ["Eurostar", "placebo", "Red Bull", "Snickers"],
+};
+
 // ---- Private canon helpers. These run only in the Worker. ----
 // dossierBlock and buildDebateSystem moved here from the client so the
 // DOSSIERS map (the actual product) never ships to the browser.
@@ -1358,7 +1356,29 @@ export async function onRequestPost({ request, env }) {
   // Stream the upstream response back. Preserve status code so the client
   // can distinguish 401/429/500 from 200.
   const text = await upstream.text();
-  return new Response(text, {
+
+  // If this turn was spoken by a figure with a documented case list, scan the
+  // model's OUTPUT for those cases and attach a deterministic count. The case
+  // lists live only here; the client receives only which cases appeared (all
+  // already visible in the turn) plus the total, never the unused names.
+  let outBody = text;
+  const speaker = body.debatePair && body.debatePair.speaker;
+  if (upstream.ok && speaker && ANCHORS[speaker]) {
+    try {
+      const parsed = JSON.parse(text);
+      const contentText = (parsed.content || [])
+        .filter((b) => b && b.type === "text")
+        .map((b) => b.text).join(" ").toLowerCase();
+      const list = ANCHORS[speaker];
+      const hits = list.filter((name) => contentText.includes(name.toLowerCase()));
+      parsed._anchors = { hits, total: list.length };
+      outBody = JSON.stringify(parsed);
+    } catch (e) {
+      outBody = text;
+    }
+  }
+
+  return new Response(outBody, {
     status: upstream.status,
     headers: {
       "Content-Type": "application/json",
