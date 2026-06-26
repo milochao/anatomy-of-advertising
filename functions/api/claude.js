@@ -1400,6 +1400,25 @@ export async function onRequestPost({ request, env }) {
     return json({ error: "Bad request body" }, 400);
   }
 
+  // ---- get_standards: return each figure's own judging standard for per-figure scoring ----
+  // Called once by the client before evaluateExchange. Returns the test fields
+  // from the private dossiers. No Anthropic call; no KV increment.
+  if (body.action === "get_standards") {
+    const aId = body.a;
+    const bId = body.b;
+    const aD = DOSSIERS[aId];
+    const bD = DOSSIERS[bId];
+    const aObj = FIGURES[aId];
+    const bObj = FIGURES[bId];
+    return new Response(JSON.stringify({
+      standardA: aD && aD.test ? aD.test : aObj ? `An argument passes if it is consistent with the documented position and work of ${aObj.first} ${aObj.last}.` : null,
+      standardB: bD && bD.test ? bD.test : bObj ? `An argument passes if it is consistent with the documented position and work of ${bObj.first} ${bObj.last}.` : null,
+    }), {
+      status: 200,
+      headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+    });
+  }
+
   // Build the debate system block server-side from the private DOSSIERS.
   // The client sends { debatePair: { a, b } } only; the canon stays here.
   let systemBlock = null;
