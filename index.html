@@ -610,7 +610,7 @@ Return JSON only. Schema: { "graf": "exactly 3 sentences under 55 words" }`
     }
 
     setCardGenerating(false);
-
+}
   async function callClaude(prompt, maxTokens = 1500, model = "claude-sonnet-4-6", debatePair = null) {
     const res = await fetch("/api/claude", {
       method:"POST",
