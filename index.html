@@ -529,6 +529,30 @@ ${instruction}`;
     });
     lines.push("---");
     lines.push("");
+    // The poster card is deliberately a glanceable image now — name, verdict,
+    // one decisive line. The analysis that used to be printed on the card
+    // (what neither side settled, the line that decided it) belongs in the
+    // caption people actually write when they post the image, so it goes
+    // here instead of getting silently dropped.
+    if (roomCard) {
+      const vWinnerKey = roomCard.moveOfRound?.speaker || "B";
+      const vLoserKey = vWinnerKey === "A" ? "B" : "A";
+      const vWinnerObj = vWinnerKey === "A" ? slotAObj : slotBObj;
+      const vLoserObj = vLoserKey === "A" ? slotAObj : slotBObj;
+      const vOpenGroundWinner = vWinnerKey === "A" ? roomCard.openGroundA : roomCard.openGroundB;
+      const vOpenGroundLoser = vLoserKey === "A" ? roomCard.openGroundA : roomCard.openGroundB;
+      lines.push("## The Verdict");
+      lines.push("");
+      if (roomCard.roomNote) { lines.push(roomCard.roomNote); lines.push(""); }
+      if (roomCard.moveOfRound?.quote) {
+        lines.push(`**The line that decided it:** "${roomCard.moveOfRound.quote}" — ${vWinnerObj.last}, turn ${roomCard.moveOfRound.turnIndex}.${roomCard.moveOfRound.reason ? ` ${roomCard.moveOfRound.reason}` : ""}`);
+        lines.push("");
+      }
+      if (vOpenGroundLoser) { lines.push(`**What ${vLoserObj.last} never answered:** ${vOpenGroundLoser}`); lines.push(""); }
+      if (vOpenGroundWinner) { lines.push(`**What ${vWinnerObj.last} never answered:** ${vOpenGroundWinner}`); lines.push(""); }
+      lines.push("---");
+      lines.push("");
+    }
     lines.push("*Reconstructions. Positions drawn from published work, voices approximated. Informed pastiche, not direct quotation.*");
     lines.push("");
     lines.push("From The Anatomy of Advertising — a graduate-level course in advertising theory and history.");
