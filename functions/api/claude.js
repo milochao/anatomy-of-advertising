@@ -1548,10 +1548,11 @@ Score each figure 0-100 independently. Tier-three figures with limited firsthand
 ${perFigureBlock}
 MOVE OF THE ROUND: Identify the single sharpest turn in the exchange. Give the turn number, the speaker (A or B), and one sentence on why it landed, written in sports-columnist register — punchy, plain, the way a columnist teases the moment a game turned, not academic commentary.
 
-Quote a phrase under 12 words from the turn itself. The quote must stand on its own as a complete thought — a reader who sees ONLY this quote, with no turn before it, must be able to understand it.
-WRONG (depends on an antecedent not in the quote): "that is a distribution and physical availability story, not a semiotics story" — "that" refers to something said earlier and isn't recoverable from the quote alone.
-RIGHT (complete on its own): "a Gen X skew is a shelf-placement story, not a semiotics story"
-If the sharpest words in the turn require an antecedent like this, either extend the quote to include what "that" refers to, or pick a different, self-sufficient line from the same turn — never ship the dangling-pronoun version.
+Quote a phrase under 12 words from the turn itself — a hard limit, not a target; count the words before you answer. The quote must stand on its own as a complete thought, in plain language, with no debate-internal shorthand — a reader who sees ONLY this quote, cold, with no turn before it and no other card, must immediately understand it.
+WRONG (dangling pronoun, needs an antecedent not in the quote): "that is a distribution and physical availability story, not a semiotics story"
+WRONG (leans on an invented metaphor from earlier in the debate that this quote never explains): "no amount of penetration strategy fixes a mirror that is showing people the wrong reflection"
+RIGHT (complete, plain, no invented terms): "a Gen X skew is a shelf-placement story, not a semiotics story"
+Never coin or lean on a metaphor this quote itself doesn't explain (a "mirror," a "signal," anything named earlier in the debate) — say the plain thing it stands for instead. If the sharpest words in the turn require an antecedent, either extend the quote to include what it refers to, or pick a different, self-sufficient line from the same turn — never ship the dangling or jargon-dependent version, and never let the word count run past the limit trying to fit one in.
 
 HIGHLIGHTS: The card export shows one card per turn, not just the single sharpest one — a reader should see the whole arc, not just its peak. For EVERY turn in the transcript, in order, pull the single most quotable phrase from that specific turn (under 14 words) and a short label naming the move it made (e.g. "THE OPENING CLAIM", "THE COUNTER", "THE CONCESSION", "THE PIVOT", "THE CLOSING BLOW" — vary these to fit what actually happened in that turn, don't reuse a fixed sequence). Same self-containment rule as MOVE OF THE ROUND above applies to every one of these quotes, not just the featured one.
 

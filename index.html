@@ -784,11 +784,14 @@ ${instruction}`;
     // it (multiplying by white is a no-op) while keeping the dark linework,
     // so the portrait reads as printed directly on the poster instead of
     // pasted on as a photo card.
+    // yMin anchored the crop to the top and let the box's excess height
+    // get cut entirely from the bottom — on a tight headshot that's the
+    // chin. yMid splits the overflow evenly top and bottom instead.
     const posterWinnerBlock = winnerPortrait
-      ? `<image href="${winnerPortrait}" x="46" y="560" width="480" height="360" clip-path="url(#pw)" filter="url(#pbw)" style="mix-blend-mode:multiply" preserveAspectRatio="xMidYMin slice"/>`
+      ? `<image href="${winnerPortrait}" x="46" y="560" width="480" height="360" clip-path="url(#pw)" filter="url(#pbw)" style="mix-blend-mode:multiply" preserveAspectRatio="xMidYMid slice"/>`
       : monogramSVG(winnerObj, 46, 560, 480, 360, 0.9);
     const posterLoserBlock = loserPortrait
-      ? `<image href="${loserPortrait}" x="554" y="560" width="480" height="360" clip-path="url(#pl)" filter="url(#pbw)" style="mix-blend-mode:multiply" opacity="0.88" preserveAspectRatio="xMidYMin slice"/>`
+      ? `<image href="${loserPortrait}" x="554" y="560" width="480" height="360" clip-path="url(#pl)" filter="url(#pbw)" style="mix-blend-mode:multiply" opacity="0.88" preserveAspectRatio="xMidYMid slice"/>`
       : monogramSVG(loserObj, 554, 560, 480, 360, 0.75);
 
 
@@ -902,7 +905,11 @@ ${instruction}`;
     // the whole exchange, so this reuses the portraits/colors already
     // fetched above rather than fetching anything new.
     function buildPunchCardSVG({ speakerObj, speakerTrad, speakerColor, speakerPortrait, quote, label, turnIndex, totalTurns }) {
-      const quoteLines = wrapCapped(`"${quote}"`, 24, 4);
+      // Cap is a safety net, not the expected case — the model doesn't
+      // reliably hold to the word limit asked for server-side, so this
+      // needs enough headroom that a slightly-over-length quote doesn't
+      // land right at the boundary and get chopped mid-word.
+      const quoteLines = wrapCapped(`"${quote}"`, 24, 5);
       const quoteLineH = 58;
 
       const HEADER_BOTTOM = 116;
@@ -927,7 +934,7 @@ ${instruction}`;
       const quoteStartY = ruleY + RULE_TO_QUOTE;
 
       const portraitBlock = speakerPortrait
-        ? `<image href="${speakerPortrait}" x="340" y="${portraitY}" width="400" height="${PORTRAIT_H}" clip-path="url(#pp)" filter="url(#pbw)" style="mix-blend-mode:multiply" preserveAspectRatio="xMidYMin slice"/>`
+        ? `<image href="${speakerPortrait}" x="340" y="${portraitY}" width="400" height="${PORTRAIT_H}" clip-path="url(#pp)" filter="url(#pbw)" style="mix-blend-mode:multiply" preserveAspectRatio="xMidYMid slice"/>`
         : monogramSVG(speakerObj, 340, portraitY, 400, PORTRAIT_H, 0.9);
 
       const quoteBlock = quoteLines.map((l, i) =>
