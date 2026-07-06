@@ -554,18 +554,29 @@ ${instruction}`;
   }
 
   // Fetch portraits as blob data URLs — cross-origin <image href> fails in blob-URL SVGs.
+  // Returns { dataURL, error } so callers can tell success from a swallowed failure.
   async function fetchPortraitDataURL(url) {
     try {
       const r = await fetch(url, { mode: "cors" });
-      if (!r.ok) return null;
+      if (!r.ok) return { dataURL: null, error: `HTTP ${r.status}` };
       const blob = await r.blob();
-      return new Promise((resolve) => {
+      return await new Promise((resolve) => {
         const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = () => resolve(null);
+        reader.onload = () => resolve({ dataURL: reader.result, error: null });
+        reader.onerror = () => resolve({ dataURL: null, error: "FileReader failed" });
         reader.readAsDataURL(blob);
       });
-    } catch (e) { return null; }
+    } catch (e) { return { dataURL: null, error: e.message || String(e) }; }
+  }
+
+  // Never fall back to the raw cross-origin URL here. A blob-wrapped SVG with a
+  // cross-origin <image href> silently taints the canvas and produces a blank
+  // portrait with no error surfaced. If the data URL fetch failed, render a
+  // monogram instead of reintroducing the exact bug this comment sits next to.
+  function monogramSVG(obj, x, y, w, h, opacity) {
+    const initials = ((obj.first && obj.first !== obj.last ? obj.first[0] : "") + obj.last[0]).toUpperCase();
+    return `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="#1a1a1a"/>
+  <text x="${x + w/2}" y="${y + h/2 + 14}" fill="#ffffff" font-family="Arial Black, Arial, sans-serif" font-size="${Math.round(h*0.32)}" font-weight="900" text-anchor="middle" opacity="${opacity}">${initials}</text>`;
   }
 
   async function renderCard(svgString, filename) {
@@ -665,12 +676,14 @@ Return JSON only. Schema: { "graf": "exactly 3 sentences under 55 words" }`
       columnGraf = `${winnerObj.last} landed the move that mattered. ${loserObj.last} never answered it. That silence was the fight.`;
     }
 
-    const [winnerDataURL, loserDataURL] = await Promise.all([
+    const [winnerFetch, loserFetch] = await Promise.all([
       fetchPortraitDataURL(`https://aoa.milochao.com/portraits/${winnerObj.id}.png`),
       fetchPortraitDataURL(`https://aoa.milochao.com/portraits/${loserObj.id}.png`),
     ]);
-    const winnerPortrait = winnerDataURL || `https://aoa.milochao.com/portraits/${winnerObj.id}.png`;
-    const loserPortrait = loserDataURL || `https://aoa.milochao.com/portraits/${loserObj.id}.png`;
+    if (winnerFetch.error) console.error(`Portrait fetch failed for ${winnerObj.id}:`, winnerFetch.error);
+    if (loserFetch.error) console.error(`Portrait fetch failed for ${loserObj.id}:`, loserFetch.error);
+    const winnerPortrait = winnerFetch.dataURL;
+    const loserPortrait = loserFetch.dataURL;
 
     // FIX C: topic at 36px wrapped at 38 chars; quote wrapped at 28 chars per line, max 2 lines
     const topicLines = wrapText(debateTopic, 38);
@@ -695,6 +708,13 @@ Return JSON only. Schema: { "graf": "exactly 3 sentences under 55 words" }`
     ).join("\n");
     const attributionY = 858 + Math.min(quoteLines.length, 2) * 56;
 
+    const winnerImageBlock = winnerPortrait
+      ? `<image href="${winnerPortrait}" x="-60" y="${ruleY}" width="860" height="${1080 - ruleY}" clip-path="url(#gc)" filter="url(#bw)" preserveAspectRatio="xMidYMin slice" opacity="0.9"/>`
+      : monogramSVG(winnerObj, -60, ruleY, 860, 1080 - ruleY, 0.35);
+    const loserImageBlock = loserPortrait
+      ? `<image href="${loserPortrait}" x="694" y="264" width="320" height="360" clip-path="url(#rc)" filter="url(#bwd)" preserveAspectRatio="xMidYMin slice" opacity="0.4"/>`
+      : monogramSVG(loserObj, 694, 264, 320, 360, 0.25);
+
     const card1SVG = `<svg viewBox="0 0 1080 1080" xmlns="http://www.w3.org/2000/svg" width="1080" height="1080">
   <defs>
     <clipPath id="gc"><rect x="0" y="0" width="1080" height="1080"/></clipPath>
@@ -706,11 +726,11 @@ Return JSON only. Schema: { "graf": "exactly 3 sentences under 55 words" }`
     <filter id="bwd"><feColorMatrix type="saturate" values="0"/><feComponentTransfer><feFuncR type="linear" slope="0.3"/><feFuncG type="linear" slope="0.3"/><feFuncB type="linear" slope="0.3"/></feComponentTransfer></filter>
   </defs>
   <rect width="1080" height="1080" fill="#080808"/>
-  <image href="${winnerPortrait}" x="-60" y="${ruleY}" width="860" height="${1080 - ruleY}" clip-path="url(#gc)" filter="url(#bw)" preserveAspectRatio="xMidYMin slice" opacity="0.9"/>
+  ${winnerImageBlock}
   <rect x="0" y="${ruleY}" width="1080" height="${1080 - ruleY}" fill="url(#fr)"/>
   <rect x="0" y="${ruleY}" width="1080" height="${1080 - ruleY}" fill="url(#fb)"/>
   <rect x="0" y="${ruleY - 30}" width="1080" height="130" fill="url(#ft)"/>
-  <image href="${loserPortrait}" x="694" y="264" width="320" height="360" clip-path="url(#rc)" filter="url(#bwd)" preserveAspectRatio="xMidYMin slice" opacity="0.4"/>
+  ${loserImageBlock}
   <rect x="680" y="258" width="360" height="384" fill="#080808" opacity="0.52"/>
   <rect x="0" y="0" width="1080" height="5" fill="#ffffff"/>
   <rect x="0" y="5" width="1080" height="${ruleY}" fill="#080808"/>
@@ -803,8 +823,9 @@ Return JSON only. Schema: { "graf": "exactly 3 sentences under 55 words" }`
       const hook = verdict.unanswered || "";
       const posText = position.trim();
 
-      const portraitDataURL = await fetchPortraitDataURL(`https://aoa.milochao.com/portraits/${slotAObj.id}.png`);
-      const portrait = portraitDataURL || `https://aoa.milochao.com/portraits/${slotAObj.id}.png`;
+      const portraitFetch = await fetchPortraitDataURL(`https://aoa.milochao.com/portraits/${slotAObj.id}.png`);
+      if (portraitFetch.error) console.error(`Portrait fetch failed for ${slotAObj.id}:`, portraitFetch.error);
+      const portrait = portraitFetch.dataURL;
 
       const positionLines = wrapText(posText, 42).slice(0, 3);
       const positionLineH = 32;
@@ -818,6 +839,10 @@ Return JSON only. Schema: { "graf": "exactly 3 sentences under 55 words" }`
         `<text x="56" y="${840 + i * 50}" fill="#ffffff" font-family="Arial Black, Arial, sans-serif" font-size="38" font-weight="900" letter-spacing="-1">${l}</text>`
       ).join("\n");
 
+      const portraitImageBlock = portrait
+        ? `<image href="${portrait}" x="120" y="${ruleY}" width="960" height="${1080 - ruleY}" filter="url(#sbw)" preserveAspectRatio="xMidYMin slice" opacity="0.85"/>`
+        : monogramSVG(slotAObj, 120, ruleY, 960, 1080 - ruleY, 0.35);
+
       const svg = `<svg viewBox="0 0 1080 1080" xmlns="http://www.w3.org/2000/svg" width="1080" height="1080">
   <defs>
     <linearGradient id="sfb" x1="0" y1="0" x2="0" y2="1"><stop offset="20%" stop-color="#080808" stop-opacity="0"/><stop offset="100%" stop-color="#080808" stop-opacity="1"/></linearGradient>
@@ -826,7 +851,7 @@ Return JSON only. Schema: { "graf": "exactly 3 sentences under 55 words" }`
     <filter id="sbw"><feColorMatrix type="saturate" values="0"/></filter>
   </defs>
   <rect width="1080" height="1080" fill="#080808"/>
-  <image href="${portrait}" x="120" y="${ruleY}" width="960" height="${1080 - ruleY}" filter="url(#sbw)" preserveAspectRatio="xMidYMin slice" opacity="0.85"/>
+  ${portraitImageBlock}
   <rect x="0" y="${ruleY}" width="1080" height="${1080 - ruleY}" fill="url(#sfr)"/>
   <rect x="0" y="${ruleY}" width="1080" height="${1080 - ruleY}" fill="url(#sfb)"/>
   <rect x="0" y="${ruleY - 30}" width="1080" height="130" fill="url(#sft)"/>
