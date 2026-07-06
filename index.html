@@ -664,6 +664,8 @@ ${instruction}`;
     const debateTopic = exchange.topic || "";
     const winnerTrad = (TRADITIONS[winnerObj.tradition] || {}).label || "";
     const loserTrad = (TRADITIONS[loserObj.tradition] || {}).label || "";
+    const winnerColor = (TRADITIONS[winnerObj.tradition] || {}).color || "#111111";
+    const loserColor = (TRADITIONS[loserObj.tradition] || {}).color || "#111111";
     // FIX 4: loser open ground leads on card 2 — it's the unanswered question
     const openGroundLoser = loserKey === "A" ? roomCard.openGroundA : roomCard.openGroundB;
     const openGroundWinner = winnerKey === "A" ? roomCard.openGroundA : roomCard.openGroundB;
@@ -760,6 +762,17 @@ Return JSON only. Schema: { "graf": "exactly 3 sentences under 55 words" }`
       ? `<image href="${loserPortrait}" x="694" y="264" width="320" height="360" clip-path="url(#rc)" filter="url(#bwd)" preserveAspectRatio="xMidYMin slice" opacity="0.4"/>`
       : monogramSVG(loserObj, 694, 264, 320, 360, 0.25);
 
+    // Small matchup-strip thumbnails for card 2 — same portraits, same
+    // monogram fallback, cropped to a rounded square instead of full-bleed.
+    const winnerThumbBlock = winnerPortrait
+      ? `<image href="${winnerPortrait}" x="56" y="92" width="120" height="120" clip-path="url(#c2w)" filter="url(#c2bw)" preserveAspectRatio="xMidYMin slice"/>`
+      : monogramSVG(winnerObj, 56, 92, 120, 120, 0.9);
+    const loserThumbBlock = loserPortrait
+      ? `<image href="${loserPortrait}" x="904" y="92" width="120" height="120" clip-path="url(#c2l)" filter="url(#c2bw)" opacity="0.55" preserveAspectRatio="xMidYMin slice"/>`
+      : monogramSVG(loserObj, 904, 92, 120, 120, 0.45);
+
+    const scoreMeterW = Math.max(0, Math.min(100, roomCard.roomScore)) / 100 * 220;
+
     const card1SVG = `<svg viewBox="0 0 1080 1080" xmlns="http://www.w3.org/2000/svg" width="1080" height="1080">
   <defs>
     <clipPath id="gc"><rect x="0" y="0" width="1080" height="1080"/></clipPath>
@@ -794,39 +807,64 @@ Return JSON only. Schema: { "graf": "exactly 3 sentences under 55 words" }`
   <text x="1024" y="1055" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="700" letter-spacing="2" text-anchor="end" opacity="0.3">DEBATE ${String(roundCount).padStart(3,"0")}</text>
 </svg>`;
 
-    const grafLines = wrapText(columnGraf, 50);
-    const grafLineH = 28;
-    const grafY = 300;
+    // Wraps then caps to maxLines, appending an ellipsis on the last visible
+    // line if that cut off real content — reads as an intentional edit
+    // rather than a broken sentence. Bounds worst-case height without
+    // guessing at word counts the model isn't strictly held to.
+    function wrapCapped(str, maxChars, maxLines) {
+      const lines = wrapText(str, maxChars);
+      if (lines.length <= maxLines) return lines;
+      const kept = lines.slice(0, maxLines);
+      kept[maxLines - 1] = kept[maxLines - 1].replace(/[.,;:—-]*$/, "") + "…";
+      return kept;
+    }
+
+    const grafLines = wrapCapped(columnGraf, 56, 7);
+    const grafLineH = 26;
+    const grafY = 336;
     const grafBlock = grafLines.map((l, i) =>
-      `<text x="56" y="${grafY + i * grafLineH}" fill="#111111" font-family="Arial, Helvetica, sans-serif" font-size="21" letter-spacing="-0.3">${l}</text>`
+      `<text x="56" y="${grafY + i * grafLineH}" fill="#111111" font-family="Arial, Helvetica, sans-serif" font-size="20" letter-spacing="-0.3">${l}</text>`
     ).join("\n");
-    const afterGraf = grafY + grafLines.length * grafLineH + 36;
+    const afterGraf = grafY + grafLines.length * grafLineH + 32;
 
-    const ogLoserLines = wrapText(openGroundLoser || "", 50);
-    const ogWinnerLines = wrapText(openGroundWinner || "", 50);
+    const ogLoserLines = wrapCapped(openGroundLoser || "", 58, 4);
+    const ogWinnerLines = wrapCapped(openGroundWinner || "", 58, 4);
 
-    const ogLoserY = afterGraf + 56;
+    const ogLoserY = afterGraf + 44;
     const ogLoserBlock = ogLoserLines.map((l, i) =>
-      `<text x="74" y="${ogLoserY + 26 + i * 26}" fill="#111111" font-family="Arial, Helvetica, sans-serif" font-size="19" letter-spacing="-0.2">${l}</text>`
+      `<text x="74" y="${ogLoserY + 24 + i * 24}" fill="#111111" font-family="Arial, Helvetica, sans-serif" font-size="18" letter-spacing="-0.2">${l}</text>`
     ).join("\n");
-    const afterOgLoser = ogLoserY + 26 + ogLoserLines.length * 26 + 28;
+    const afterOgLoser = ogLoserY + 24 + ogLoserLines.length * 24 + 22;
 
-    const ogWinnerY = afterOgLoser + 24;
+    const ogWinnerY = afterOgLoser + 20;
     const ogWinnerBlock = ogWinnerLines.map((l, i) =>
-      `<text x="74" y="${ogWinnerY + 26 + i * 26}" fill="#111111" font-family="Arial, Helvetica, sans-serif" font-size="19" letter-spacing="-0.2">${l}</text>`
+      `<text x="74" y="${ogWinnerY + 24 + i * 24}" fill="#111111" font-family="Arial, Helvetica, sans-serif" font-size="18" letter-spacing="-0.2">${l}</text>`
     ).join("\n");
-    const afterOgWinner = ogWinnerY + 26 + ogWinnerLines.length * 26 + 32;
+    const afterOgWinner = ogWinnerY + 24 + ogWinnerLines.length * 24 + 26;
 
     const card2SVG = `<svg viewBox="0 0 1080 1080" xmlns="http://www.w3.org/2000/svg" width="1080" height="1080">
+  <defs>
+    <clipPath id="c2w"><rect x="56" y="92" width="120" height="120" rx="8"/></clipPath>
+    <clipPath id="c2l"><rect x="904" y="92" width="120" height="120" rx="8"/></clipPath>
+    <filter id="c2bw"><feColorMatrix type="saturate" values="0"/></filter>
+  </defs>
   <rect width="1080" height="1080" fill="#ffffff"/>
   <rect x="0" y="0" width="1080" height="5" fill="#111111"/>
   <text x="56" y="50" fill="#111111" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="700" letter-spacing="4" opacity="0.4">THE ANATOMY OF ADVERTISING</text>
   <line x1="56" y1="64" x2="1024" y2="64" stroke="#111111" stroke-width="0.75"/>
-  <text x="56" y="124" fill="#111111" font-family="Arial Black, Arial, sans-serif" font-size="56" font-weight="900" letter-spacing="-2">${winnerObj.last.toUpperCase()}</text>
-  <text x="56" y="152" fill="#bbbbbb" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="700" letter-spacing="5">VS</text>
-  <text x="56" y="188" fill="#aaaaaa" font-family="Arial Black, Arial, sans-serif" font-size="28" font-weight="900" letter-spacing="-1">${loserObj.last.toUpperCase()}</text>
-  <line x1="56" y1="210" x2="1024" y2="210" stroke="#111111" stroke-width="0.75"/>
-  <text x="56" y="252" fill="#111111" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="700" letter-spacing="4">THE FIGHT</text>
+
+  ${winnerThumbBlock}
+  <rect x="56" y="217" width="120" height="5" fill="${winnerColor}"/>
+  <text x="192" y="132" fill="#111111" font-family="Arial Black, Arial, sans-serif" font-size="40" font-weight="900" letter-spacing="-1.5">${winnerObj.last.toUpperCase()}</text>
+  <text x="192" y="154" fill="#999999" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="700" letter-spacing="2">${winnerTrad.toUpperCase()} &#183; ${winnerObj.year}</text>
+  <text x="540" y="158" fill="#bbbbbb" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="700" letter-spacing="5" text-anchor="middle">VS</text>
+  ${loserThumbBlock}
+  <rect x="904" y="217" width="120" height="5" fill="${loserColor}" opacity="0.5"/>
+  <text x="888" y="132" fill="#aaaaaa" font-family="Arial Black, Arial, sans-serif" font-size="28" font-weight="900" letter-spacing="-1" text-anchor="end">${loserObj.last.toUpperCase()}</text>
+  <text x="888" y="154" fill="#bbbbbb" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="700" letter-spacing="2" text-anchor="end">${loserTrad.toUpperCase()} &#183; ${loserObj.year}</text>
+  <line x1="56" y1="246" x2="1024" y2="246" stroke="#111111" stroke-width="0.75"/>
+
+  <text x="56" y="288" fill="#111111" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="700" letter-spacing="4">THE FIGHT</text>
   ${grafBlock}
   <rect x="56" y="${afterGraf}" width="968" height="1" fill="#dddddd"/>
   <text x="56" y="${afterGraf + 38}" fill="#111111" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="700" letter-spacing="4">WHAT NEITHER SETTLED</text>
@@ -837,9 +875,11 @@ Return JSON only. Schema: { "graf": "exactly 3 sentences under 55 words" }`
   <text x="74" y="${ogWinnerY + 18}" fill="#aaaaaa" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="700" letter-spacing="3">${winnerObj.last.toUpperCase()}</text>
   ${ogWinnerBlock}
   <rect x="56" y="${afterOgWinner}" width="968" height="1" fill="#dddddd"/>
-  <text x="56" y="${afterOgWinner + 36}" fill="#aaaaaa" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="700" letter-spacing="3">ROOM SCORE</text>
-  <text x="180" y="${afterOgWinner + 36}" fill="#111111" font-family="Arial Black, Arial, sans-serif" font-size="20" font-weight="900" letter-spacing="-0.5">${roomCard.roomScore}</text>
-  <text x="214" y="${afterOgWinner + 36}" fill="#aaaaaa" font-family="Arial, Helvetica, sans-serif" font-size="13"> out of 100.</text>
+  <text x="56" y="${afterOgWinner + 26}" fill="#aaaaaa" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="700" letter-spacing="3">FINAL SCORE</text>
+  <text x="56" y="${afterOgWinner + 64}" fill="#111111" font-family="Arial Black, Arial, sans-serif" font-size="40" font-weight="900" letter-spacing="-1.5">${roomCard.roomScore}</text>
+  <text x="${56 + String(roomCard.roomScore).length * 23 + 4}" y="${afterOgWinner + 64}" fill="#aaaaaa" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="700">/100</text>
+  <rect x="200" y="${afterOgWinner + 50}" width="220" height="8" rx="4" fill="#eeeeee"/>
+  <rect x="200" y="${afterOgWinner + 50}" width="${scoreMeterW}" height="8" rx="4" fill="${winnerColor}"/>
   <rect x="0" y="1010" width="1080" height="70" fill="#111111"/>
   <text x="56" y="1051" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="700" letter-spacing="2" opacity="0.35">AOA.MILOCHAO.COM</text>
   <text x="1024" y="1051" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="700" letter-spacing="2" text-anchor="end" opacity="0.35">DEBATE ${String(roundCount).padStart(3,"0")}</text>
