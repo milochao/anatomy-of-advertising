@@ -1548,6 +1548,8 @@ Score each figure 0-100 independently. Tier-three figures with limited firsthand
 ${perFigureBlock}
 MOVE OF THE ROUND: Identify the single sharpest turn in the exchange. Give the turn number, the speaker (A or B), and one sentence on why it landed. Quote a phrase under 12 words from the turn itself.
 
+HIGHLIGHTS: The card export shows one card per turn, not just the single sharpest one — a reader should see the whole arc, not just its peak. For EVERY turn in the transcript, in order, pull the single most quotable phrase from that specific turn (under 14 words) and a short label naming the move it made (e.g. "THE OPENING CLAIM", "THE COUNTER", "THE CONCESSION", "THE PIVOT", "THE CLOSING BLOW" — vary these to fit what actually happened in that turn, don't reuse a fixed sequence). Even a quieter turn has some line worth pulling — do not skip a turn.
+
 OPEN GROUND: For each figure, in one sentence, what does their own standard reveal as unfinished in this exchange? If per-figure standards were provided, use them. Be specific. Not generic.
 
 Return JSON only. No preamble. No fences. Schema:
@@ -1573,11 +1575,19 @@ Return JSON only. No preamble. No fences. Schema:
     "quote": "phrase from that turn, under 12 words",
     "reason": "one sentence on why it landed"
   },
+  "highlights": [
+    {
+      "turnIndex": number,
+      "speaker": "A or B (one letter)",
+      "quote": "the most quotable phrase from this turn, under 14 words",
+      "label": "short caption naming the move, e.g. THE OPENING CLAIM"
+    }
+  ],
   "openGroundA": "one sentence on what A's own standard would flag as unfinished",
   "openGroundB": "one sentence on what B's own standard would flag as unfinished"
 }`;
 
-    const upstream = await callAnthropic(apiKey, "claude-sonnet-4-6", 1400, [{ role: "user", content: prompt }], null);
+    const upstream = await callAnthropic(apiKey, "claude-sonnet-4-6", 1800, [{ role: "user", content: prompt }], null);
     const text = await upstream.text();
     return new Response(redactStandardEcho(text, upstream.ok, [standardA, standardB]), {
       status: upstream.status,
