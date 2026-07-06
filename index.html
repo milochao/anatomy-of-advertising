@@ -887,15 +887,104 @@ ${instruction}`;
   <text x="1024" y="1051" fill="#E3A83C" font-family="Arial Black, Arial, sans-serif" font-size="16" font-weight="900" text-anchor="end" letter-spacing="1">DEBATE ${String(roundCount).padStart(3,"0")}</text>
 </svg>`;
 
+    // One punch card per turn — every round gets a card, not just the one
+    // decisive quote. Every turn belongs to whichever figure won or lost
+    // the whole exchange, so this reuses the portraits/colors already
+    // fetched above rather than fetching anything new.
+    function buildPunchCardSVG({ speakerObj, speakerTrad, speakerColor, speakerPortrait, quote, label, turnIndex, totalTurns }) {
+      const quoteLines = wrapCapped(`"${quote}"`, 24, 4);
+      const quoteLineH = 58;
+
+      const HEADER_BOTTOM = 116;
+      const FOOTER_TOP = 1010;
+      const LABEL_BLOCK_H = 55;
+      const PORTRAIT_H = 300;
+      const GAP_AFTER_PORTRAIT = 20;
+      const NAME_PLATE_H = 42;
+      const TRAD_LINE_H = 35;
+      const GAP_BEFORE_RULE = 25;
+      const RULE_TO_QUOTE = 55;
+
+      const naturalH = LABEL_BLOCK_H + PORTRAIT_H + GAP_AFTER_PORTRAIT + NAME_PLATE_H + TRAD_LINE_H + GAP_BEFORE_RULE + RULE_TO_QUOTE + quoteLines.length * quoteLineH;
+      const shiftY = Math.max(0, Math.floor(((FOOTER_TOP - HEADER_BOTTOM) - naturalH) / 2));
+      const blockTop = HEADER_BOTTOM + shiftY;
+
+      const labelY = blockTop + 30;
+      const portraitY = blockTop + LABEL_BLOCK_H;
+      const namePlateY = portraitY + PORTRAIT_H + GAP_AFTER_PORTRAIT;
+      const tradY = namePlateY + NAME_PLATE_H + 27;
+      const ruleY = tradY + GAP_BEFORE_RULE;
+      const quoteStartY = ruleY + RULE_TO_QUOTE;
+
+      const portraitBlock = speakerPortrait
+        ? `<image href="${speakerPortrait}" x="340" y="${portraitY}" width="400" height="${PORTRAIT_H}" clip-path="url(#pp)" filter="url(#pbw)" preserveAspectRatio="xMidYMin slice"/>`
+        : monogramSVG(speakerObj, 340, portraitY, 400, PORTRAIT_H, 0.9);
+
+      const quoteBlock = quoteLines.map((l, i) =>
+        `<text x="540" y="${quoteStartY + i * quoteLineH}" fill="#1a1408" font-family="Arial Black, Arial, sans-serif" font-size="46" font-weight="900" text-anchor="middle" letter-spacing="-1">${l}</text>`
+      ).join("\n");
+
+      return `<svg viewBox="0 0 1080 1080" xmlns="http://www.w3.org/2000/svg" width="1080" height="1080">
+  <defs>
+    <clipPath id="pp"><rect x="340" y="${portraitY}" width="400" height="${PORTRAIT_H}" rx="10"/></clipPath>
+    <filter id="pbw"><feColorMatrix type="saturate" values="0.15"/></filter>
+  </defs>
+
+  <rect width="1080" height="1080" fill="#E3A83C"/>
+  <rect x="18" y="18" width="1044" height="1044" fill="none" stroke="#1a1408" stroke-width="3"/>
+
+  <rect x="0" y="0" width="1080" height="110" fill="#1a1408"/>
+  <rect x="0" y="110" width="1080" height="6" fill="${speakerColor}"/>
+  <text x="540" y="70" fill="${speakerColor}" font-family="Arial Black, Arial, sans-serif" font-size="38" font-weight="900" text-anchor="middle" letter-spacing="2">PUNCH ${turnIndex} OF ${totalTurns}</text>
+
+  <text x="540" y="${labelY}" fill="#B5202A" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="700" text-anchor="middle" letter-spacing="2">${label.toUpperCase()}</text>
+
+  ${portraitBlock}
+  <rect x="340" y="${portraitY}" width="400" height="${PORTRAIT_H}" rx="10" fill="none" stroke="${speakerColor}" stroke-width="5"/>
+
+  <rect x="440" y="${namePlateY}" width="200" height="${NAME_PLATE_H}" fill="${speakerColor}"/>
+  <text x="540" y="${namePlateY + 28}" fill="#1a1408" font-family="Arial Black, Arial, sans-serif" font-size="20" font-weight="900" text-anchor="middle" letter-spacing="-0.5">${speakerObj.last.toUpperCase()}</text>
+  <text x="540" y="${tradY}" fill="#8a6a2a" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="700" text-anchor="middle" letter-spacing="2">${speakerTrad.toUpperCase()} &#183; ${speakerObj.year}</text>
+
+  <rect x="46" y="${ruleY}" width="988" height="3" fill="#1a1408" opacity="0.3"/>
+  ${quoteBlock}
+
+  <rect x="0" y="1010" width="1080" height="70" fill="#1a1408"/>
+  <text x="56" y="1051" fill="#E3A83C" font-family="Arial Black, Arial, sans-serif" font-size="16" font-weight="900" letter-spacing="1">AOA.MILOCHAO.COM</text>
+  <text x="1024" y="1051" fill="#E3A83C" font-family="Arial Black, Arial, sans-serif" font-size="16" font-weight="900" text-anchor="end" letter-spacing="1">DEBATE ${String(roundCount).padStart(3,"0")}</text>
+</svg>`;
+    }
+
+    const highlights = Array.isArray(roomCard.highlights) ? roomCard.highlights : [];
+    const punchSVGs = highlights.map(h => {
+      const isWinner = h.speaker === winnerKey;
+      return buildPunchCardSVG({
+        speakerObj: h.speaker === "A" ? slotAObj : slotBObj,
+        speakerTrad: isWinner ? winnerTrad : loserTrad,
+        speakerColor: isWinner ? winnerColor : loserColor,
+        speakerPortrait: isWinner ? winnerPortrait : loserPortrait,
+        quote: h.quote || "",
+        label: h.label || `TURN ${h.turnIndex}`,
+        turnIndex: h.turnIndex,
+        totalTurns: highlights.length,
+      });
+    });
+
     try {
-      const [card1Blob, card2Blob] = await Promise.all([
+      const [card1Blob, card2Blob, ...punchBlobs] = await Promise.all([
         svgToPngBlob(card1SVG),
         svgToPngBlob(card2SVG),
+        ...punchSVGs.map(svg => svgToPngBlob(svg)),
       ]);
-      setPreparedCards({
-        card1: { blob: card1Blob, filename: `aoa-${winnerObj.id}-vs-${loserObj.id}-card1.png` },
-        card2: { blob: card2Blob, filename: `aoa-${winnerObj.id}-vs-${loserObj.id}-card2.png` },
-      });
+      setPreparedCards([
+        { blob: card1Blob, filename: `aoa-${winnerObj.id}-vs-${loserObj.id}-card1.png`, label: "Card 1" },
+        { blob: card2Blob, filename: `aoa-${winnerObj.id}-vs-${loserObj.id}-card2.png`, label: "Card 2" },
+        ...punchBlobs.map((blob, i) => ({
+          blob,
+          filename: `aoa-${winnerObj.id}-vs-${loserObj.id}-punch${i + 1}.png`,
+          label: `Punch ${i + 1}`,
+        })),
+      ]);
     } catch(e) {
       console.error("Card export failed:", e);
     }
@@ -2737,14 +2826,11 @@ function ExchangeScreen({
                 {exportFeedback ? <em>{exportFeedback}</em> : "Take it with you"}
               </button>
               {preparedCards ? (
-                <>
-                  <button className="ctrl ctrl-cards" onClick={() => onDownloadPreparedCard(preparedCards.card1)}>
-                    Download card 1
+                preparedCards.map((card, i) => (
+                  <button key={i} className="ctrl ctrl-cards" onClick={() => onDownloadPreparedCard(card)}>
+                    Download {card.label.toLowerCase()}
                   </button>
-                  <button className="ctrl ctrl-cards" onClick={() => onDownloadPreparedCard(preparedCards.card2)}>
-                    Download card 2
-                  </button>
-                </>
+                ))
               ) : (
                 <button className="ctrl ctrl-cards" onClick={onDownloadCards} disabled={cardGenerating || !roomCard}>
                   {cardGenerating ? <em>Preparing cards…</em> : "Prepare cards"}
