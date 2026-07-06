@@ -1051,7 +1051,9 @@ Return JSON only. Schema: { "graf": "exactly 3 sentences under 55 words" }`
 
     const openingInstruction = isOpening
       ? `You are opening the exchange. Stake out your position on the topic in 2 to 3 sentences. Make a claim concrete enough that ${opponent.last} can disagree with it.`
-      : `Respond directly to what ${opponent.last} just said. Engage with their specific claim. Concede what you must. Hold what you can. 2 to 4 sentences.`;
+      : `Respond directly to what ${opponent.last} just said. Engage with their specific claim. Concede what you must. Hold what you can. 2 to 4 sentences.
+
+The debate topic is: "${topic}". Your reply must still be an answer to that question, not just a reply to ${opponent.last}'s last sentence. If their move pulled the exchange toward a different question, address their point while pulling it back toward the original topic in the same breath. Do not let the conversation wander into a different question neither of you was asked.`;
 
     // Dynamic only -> sits after the cache breakpoint.
     const prompt = `TOPIC: ${topic}
@@ -1075,7 +1077,10 @@ ${openingInstruction}`;
     const speaker = speakerKey === "A" ? aObj : bObj;
     const opponent = speakerKey === "A" ? bObj : aObj;
 
-    const refPrompt = `You are a debate referee. Score whether the response below actually engages with what was just said, or whether it monologues past it.
+    const refPrompt = `You are a debate referee. Score whether the response below actually engages with what was just said, and whether the exchange as a whole is still answering the original topic.
+
+TOPIC THE DEBATE IS SUPPOSED TO ANSWER:
+${topic}
 
 WHAT ${opponent.last.toUpperCase()} SAID:
 ${lastOpponentTurn.text}
@@ -1086,15 +1091,20 @@ ${turn.text}
 Score on these:
 1. Does the reply name something specific from the prior turn (a claim, an example, a word)?
 2. Does the reply respond to that thing, rather than restating its own position?
+3. Is the reply still an answer to the stated TOPIC? A reply can pass 1 and 2, engage tightly with the opponent's last line, and still have drifted onto a different question than the one the debate was asked. Judge this independently of 1 and 2.
 
 Return JSON only. Schema:
-{ "engages": true | false, "reason": "one short sentence" }`;
+{ "engages": true | false, "onTopic": true | false, "reason": "one short sentence naming which check failed, if any" }`;
 
     try {
       const verdict = await callClaude(refPrompt, 200, "claude-haiku-4-5-20251001");
-      if (verdict.engages) return turn;
+      if (verdict.engages && verdict.onTopic) return turn;
 
       const prior = transcriptText(priorTurns, aObj, bObj);
+      const driftNote = verdict.onTopic === false
+        ? `The exchange has drifted off the original topic. Your job in this turn is to answer ${opponent.last}'s specific point AND pull the exchange back to the topic in the same breath. Name the topic explicitly if that's what it takes.`
+        : `You must respond to ${opponent.last}'s most recent point directly. Quote a phrase from it. Disagree with it specifically. Do not restate your existing position.`;
+
       const fixPrompt = `TOPIC: ${topic}
 
 THE EXCHANGE SO FAR:
@@ -1102,7 +1112,7 @@ ${prior}
 
 You are now speaking as ${speaker.first} ${speaker.last}.
 
-You must respond to ${opponent.last}'s most recent point directly. Quote a phrase from it. Disagree with it specifically. Do not restate your existing position. Do not change the subject. 2 to 4 sentences.`;
+${driftNote} Do not change the subject. 2 to 4 sentences.`;
 
       return await speakTurn({
         speakerKey, prompt: fixPrompt, maxTokens: 600,
