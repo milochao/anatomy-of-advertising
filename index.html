@@ -4430,16 +4430,19 @@ function GlobalStyle() {
         max-width: 1100px; width: 100%;
         margin-bottom: 64px;
         animation: fadeUp 0.8s ease both;
+        position: relative; z-index: 1;
       }
       .comp-card-wrap { display: flex; flex-direction: column; align-items: center; }
       .comp-card-a { align-items: flex-end; }
       .comp-card-b { align-items: flex-start; }
 
       .comp-card {
+        -webkit-appearance: none; appearance: none;
         background: var(--paper);
         border: 1.5px solid var(--ink);
         border-radius: 8px;
         padding: 0 0 16px;
+        margin: 0;
         cursor: pointer;
         position: relative;
         overflow: hidden;
@@ -4557,6 +4560,7 @@ function GlobalStyle() {
         max-width: 560px; width: 100%; text-align: center;
         opacity: 0; transform: translateY(8px);
         transition: opacity 0.6s ease, transform 0.6s ease;
+        position: relative; z-index: 2;
       }
       .composition-actions.is-ready {
         opacity: 1; transform: translateY(0);
@@ -4567,10 +4571,12 @@ function GlobalStyle() {
         font-size: 24px; color: var(--ink); margin: 0 0 22px;
       }
       .composition-input {
+        -webkit-appearance: none; appearance: none;
         width: 100%; background: var(--paper);
         border: 1.5px solid var(--ink);
         border-radius: 100px;
         padding: 14px 22px;
+        margin: 0;
         font-family: 'Geist', sans-serif;
         font-size: 16px;
         color: var(--ink); text-align: center;
@@ -4591,8 +4597,10 @@ function GlobalStyle() {
         display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;
       }
       .composition-suggestion {
+        -webkit-appearance: none; appearance: none;
         background: var(--bg); border: 1px solid var(--rule-strong);
         padding: 6px 12px;
+        margin: 0;
         border-radius: 100px;
         cursor: pointer;
         font-family: 'Geist Mono', monospace;
@@ -4607,9 +4615,11 @@ function GlobalStyle() {
       }
 
       .composition-begin {
+        -webkit-appearance: none; appearance: none;
         background: var(--ink); color: var(--bg);
         border: 2px solid var(--ink);
         padding: 18px 40px;
+        margin: 0;
         font-family: 'Geist', sans-serif;
         font-size: 16px; font-weight: 600;
         letter-spacing: -0.01em;
@@ -4921,10 +4931,12 @@ function GlobalStyle() {
 
       .spar-input-footer { display: flex; flex-direction: column; }
       .spar-turn-input {
+        -webkit-appearance: none; appearance: none;
         width: 100%; background: var(--paper);
         border: 1.5px solid var(--ink);
         border-radius: 18px;
         padding: 16px 20px;
+        margin: 0;
         font-family: 'Geist', sans-serif;
         font-size: 15px; color: var(--ink);
         line-height: 1.5;
