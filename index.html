@@ -771,7 +771,7 @@ Return JSON only. Schema: { "graf": "exactly 3 sentences under 55 words" }`
       ? `<image href="${loserPortrait}" x="904" y="92" width="120" height="120" clip-path="url(#c2l)" filter="url(#c2bw)" opacity="0.55" preserveAspectRatio="xMidYMin slice"/>`
       : monogramSVG(loserObj, 904, 92, 120, 120, 0.45);
 
-    const scoreMeterW = Math.max(0, Math.min(100, roomCard.roomScore)) / 100 * 220;
+    const scoreMeterW = Math.max(0, Math.min(100, roomCard.roomScore)) / 100 * 200;
     // A bare "64/100" means nothing to a reader who's never seen the rubric
     // — it's legible to whoever built the scoring, not whoever's scrolling
     // past the card. Translate it into the same plain-English register the
@@ -901,11 +901,10 @@ Return JSON only. Schema: { "graf": "exactly 3 sentences under 55 words" }`
   ${ogWinnerBlock}
   <rect x="56" y="${afterOgWinner}" width="968" height="1" fill="#dddddd"/>
   <text x="56" y="${afterOgWinner + 26}" fill="#aaaaaa" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="700" letter-spacing="3">FINAL SCORE</text>
-  <text x="56" y="${afterOgWinner + 64}" fill="#111111" font-family="Arial Black, Arial, sans-serif" font-size="40" font-weight="900" letter-spacing="-1.5">${roomCard.roomScore}</text>
-  <text x="${56 + String(roomCard.roomScore).length * 23 + 4}" y="${afterOgWinner + 64}" fill="#aaaaaa" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="700">/100</text>
-  <rect x="200" y="${afterOgWinner + 50}" width="220" height="8" rx="4" fill="#eeeeee"/>
-  <rect x="200" y="${afterOgWinner + 50}" width="${scoreMeterW}" height="8" rx="4" fill="${winnerColor}"/>
-  <text x="56" y="${afterOgWinner + 92}" fill="${winnerColor}" font-family="Arial Black, Arial, sans-serif" font-size="14" font-weight="900" letter-spacing="1">${roomScoreTier}</text>
+  <text x="56" y="${afterOgWinner + 64}" fill="${winnerColor}" font-family="Arial Black, Arial, sans-serif" font-size="32" font-weight="900" letter-spacing="-1">${roomScoreTier}</text>
+  <text x="56" y="${afterOgWinner + 90}" fill="#999999" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="700" letter-spacing="1">${roomCard.roomScore}/100 &#183; ROOM SCORE</text>
+  <rect x="56" y="${afterOgWinner + 100}" width="200" height="5" rx="2.5" fill="#eeeeee"/>
+  <rect x="56" y="${afterOgWinner + 100}" width="${scoreMeterW}" height="5" rx="2.5" fill="${winnerColor}" opacity="0.6"/>
   <rect x="0" y="1010" width="1080" height="70" fill="#111111"/>
   <text x="56" y="1051" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="700" letter-spacing="2" opacity="0.35">AOA.MILOCHAO.COM</text>
   <text x="1024" y="1051" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="700" letter-spacing="2" text-anchor="end" opacity="0.35">DEBATE ${String(roundCount).padStart(3,"0")}</text>
