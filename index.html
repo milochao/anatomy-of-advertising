@@ -219,10 +219,32 @@ const CONFIDENCE_EXPLANATIONS = {
 };
 
 // ============================================================
+// THIRD CHAIR RECORD — localStorage, keyed by figure id.
+// { [figureId]: { spars, survived, bestScore, lastVerdict, date } }
+// ============================================================
+const AOA_RECORD_KEY = "aoa_record";
+
+function loadRecord() {
+  try {
+    const raw = window.localStorage.getItem(AOA_RECORD_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch (e) {
+    return {};
+  }
+}
+
+function saveRecord(rec) {
+  try {
+    window.localStorage.setItem(AOA_RECORD_KEY, JSON.stringify(rec));
+  } catch (e) { /* localStorage unavailable (private mode, quota); skip silently */ }
+}
+
+// ============================================================
 // MAIN
 // ============================================================
 function AnatomyOfAdvertising() {
   const [phase, setPhase] = useState("arrival");
+  const [mode, setMode] = useState("duel"); // "duel" (two figures) | "spar" (third chair)
   const [slotA, setSlotA] = useState(null);
   const [slotB, setSlotB] = useState(null);
   const [topic, setTopic] = useState("");
@@ -241,6 +263,16 @@ function AnatomyOfAdvertising() {
   const [scoringInFlight, setScoringInFlight] = useState(false);
   const [roundCount, setRoundCount] = useState(1);
   const [priorRoomScore, setPriorRoomScore] = useState(null);
+  const [streamingTurn, setStreamingTurn] = useState(null);
+
+  // ---- Third Chair (spar) state ----
+  const [position, setPosition] = useState("");
+  const [sparTurns, setSparTurns] = useState([]);
+  const [sparStudentInput, setSparStudentInput] = useState("");
+  const [verdict, setVerdict] = useState(null);
+  const [verdictLoading, setVerdictLoading] = useState(false);
+  const [verdictError, setVerdictError] = useState(null);
+  const [record, setRecord] = useState(() => loadRecord());
 
   const thinkerById = useMemo(() => {
     const m = {}; THINKERS.forEach(t => m[t.id] = t); return m;
@@ -250,13 +282,22 @@ function AnatomyOfAdvertising() {
   const hoveredObj = hoveredId ? thinkerById[hoveredId] : null;
 
   function goArrival() {
-    setPhase("arrival"); setSlotA(null); setSlotB(null);
+    setPhase("arrival"); setMode("duel"); setSlotA(null); setSlotB(null);
     setTopic(""); setExchange(null); setVisibleTurns(0);
     setLoadingText(null); setError(null); setFollowUpFor(null); setFollowUpText("");
     setStarterContext(null); setExportFeedback(null);
     setRoomCard(null); setRoomCardError(null); setRoundCount(1); setPriorRoomScore(null);
+    setStreamingTurn(null);
+    setPosition(""); setSparTurns([]); setSparStudentInput("");
+    setVerdict(null); setVerdictLoading(false); setVerdictError(null);
   }
   function goMap() { setPhase("map"); setError(null); }
+  function goSpar() {
+    setMode("spar"); setSlotA(null); setSlotB(null);
+    setPosition(""); setSparTurns([]); setSparStudentInput("");
+    setVerdict(null); setVerdictLoading(false); setVerdictError(null);
+    setPhase("map"); setError(null);
+  }
 
   function playClick() {
     try {
@@ -291,6 +332,10 @@ function AnatomyOfAdvertising() {
   function tapStation(id) {
     const t = thinkerById[id];
     if (!t || t.kind) return;
+    if (mode === "spar") {
+      setSlotA(prev => (prev === id ? null : id));
+      return;
+    }
     if (id === slotA) { setSlotA(null); return; }
     if (id === slotB) { setSlotB(null); return; }
     if (!slotA) { playClick(); setSlotA(id); return; }
@@ -308,6 +353,132 @@ function AnatomyOfAdvertising() {
     if (!slotAObj || !slotBObj) return;
     setPhase("exchange");
     runExchange(topic);
+  }
+
+  // ---- Third Chair (spar) ----
+
+  function sparTranscriptText(turns, aObj) {
+    return turns.map(t => t.speaker === "A"
+      ? `${aObj.last.toUpperCase()}: ${t.text}`
+      : `STUDENT: ${t.text}`
+    ).join("\n\n");
+  }
+
+  // Turn-indexed variant for the score_student verdict only — the live prompt
+  // transcript above stays index-free so the Worker's extractLastOpponentTurn
+  // (which matches on a bare "SPEAKER:" prefix) keeps working unchanged.
+  function sparScoringTranscript(turns, aObj) {
+    return turns.map((t, i) => t.speaker === "A"
+      ? `[turn ${i + 1}] ${aObj.last.toUpperCase()}: ${t.text}`
+      : `[turn ${i + 1}] STUDENT: ${t.text}`
+    ).join("\n\n");
+  }
+
+  async function generateSparTurn({ aObj, positionText, priorTurns }) {
+    const prior = sparTranscriptText(priorTurns, aObj);
+    const isFirst = priorTurns.every(t => t.speaker !== "A");
+    const instruction = isFirst
+      ? `The student has just stated the position they will defend. Respond to it directly in your voice, applying your documented standard. Engage their actual claim, not a strawman. 2 to 4 sentences.`
+      : `Respond directly to what the student just said. Engage with their specific claim. Hold your documented standard. Do not be gentle. Do not be cruel. 2 to 4 sentences.`;
+
+    const prompt = `TOPIC: ${positionText}
+
+THE EXCHANGE SO FAR:
+${prior}
+
+You are now speaking as ${aObj.first} ${aObj.last}.
+
+${instruction}`;
+
+    return speakTurn({
+      speakerKey: "A", prompt, maxTokens: 700,
+      debatePair: { a: aObj.id, human: true, speaker: aObj.id, topic: positionText },
+      speakerId: aObj.id,
+    });
+  }
+
+  function recordSpar(figureId, verdictResult) {
+    const rec = { ...record };
+    const prev = rec[figureId] || { spars: 0, survived: 0, bestScore: 0, lastVerdict: null, date: null };
+    const survived = verdictResult.verdict === "pass" || verdictResult.verdict === "survived";
+    rec[figureId] = {
+      spars: prev.spars + 1,
+      survived: prev.survived + (survived ? 1 : 0),
+      bestScore: Math.max(prev.bestScore || 0, verdictResult.survivalScore || 0),
+      lastVerdict: verdictResult.verdict,
+      date: new Date().toISOString().slice(0, 10),
+    };
+    saveRecord(rec);
+    setRecord(rec);
+  }
+
+  async function scoreSpar(turnsArg) {
+    if (!slotAObj) return;
+    setVerdictLoading(true); setVerdictError(null);
+    try {
+      const transcript = sparScoringTranscript(turnsArg, slotAObj);
+      const result = await callClaudeAction("score_student", { a: slotAObj.id, topic: position.trim(), transcript });
+      setVerdict(result);
+      recordSpar(slotAObj.id, result);
+    } catch (e) {
+      console.error(e);
+      setVerdictError(e.userMessage || e.message || "Scoring the spar failed. The transcript above is complete — try again.");
+    } finally {
+      setVerdictLoading(false);
+    }
+  }
+
+  async function speakFigureTurn(turnsSoFar) {
+    if (!slotAObj) return;
+    setLoadingText(`${slotAObj.last} is responding.`);
+    try {
+      const figureTurn = await generateSparTurn({ aObj: slotAObj, positionText: position.trim(), priorTurns: turnsSoFar });
+      const updated = [...turnsSoFar, figureTurn];
+      setSparTurns(updated);
+      setLoadingText(null);
+      const figureCount = updated.filter(t => t.speaker === "A").length;
+      if (figureCount >= 3) {
+        await scoreSpar(updated);
+      }
+    } catch (e) {
+      console.error(e);
+      setError(e.userMessage || "The figure could not respond. Try again.");
+      setLoadingText(null);
+    }
+  }
+
+  async function beginSpar() {
+    if (!slotAObj) return;
+    const posText = position.trim();
+    if (!posText || posText.length > 500) return;
+    setError(null); setVerdict(null); setVerdictError(null); setVerdictLoading(false);
+    setSparStudentInput("");
+    const turns = [{ speaker: "student", text: posText }];
+    setSparTurns(turns);
+    setPhase("spar");
+    await speakFigureTurn(turns);
+  }
+
+  async function submitSparTurn() {
+    const text = sparStudentInput.trim();
+    if (!text || !slotAObj) return;
+    const figureCount = sparTurns.filter(t => t.speaker === "A").length;
+    if (figureCount >= 3) return;
+    setError(null);
+    const updated = [...sparTurns, { speaker: "student", text }];
+    setSparTurns(updated);
+    setSparStudentInput("");
+    await speakFigureTurn(updated);
+  }
+
+  function newSpar() {
+    setSparTurns([]); setVerdict(null); setVerdictError(null); setVerdictLoading(false);
+    setPosition(""); setSparStudentInput(""); setError(null);
+    setPhase("composition");
+  }
+
+  function swapSparFigure() {
+    setSlotA(null); setPhase("map");
   }
 
   function changeRoom() {
@@ -360,6 +531,59 @@ function AnatomyOfAdvertising() {
       setExportFeedback("Clipboard not available in this browser");
       setTimeout(() => setExportFeedback(null), 2400);
     }
+  }
+
+  function wrapText(str, maxChars) {
+    const words = (str || "").split(" ");
+    const lines = [];
+    let cur = "";
+    words.forEach(w => {
+      if ((cur + " " + w).trim().length > maxChars) { lines.push(cur.trim()); cur = w; }
+      else { cur = (cur + " " + w).trim(); }
+    });
+    if (cur) lines.push(cur.trim());
+    return lines;
+  }
+
+  // Fetch portraits as blob data URLs — cross-origin <image href> fails in blob-URL SVGs.
+  async function fetchPortraitDataURL(url) {
+    try {
+      const r = await fetch(url, { mode: "cors" });
+      if (!r.ok) return null;
+      const blob = await r.blob();
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => resolve(null);
+        reader.readAsDataURL(blob);
+      });
+    } catch (e) { return null; }
+  }
+
+  async function renderCard(svgString, filename) {
+    return new Promise((resolve) => {
+      const canvas = document.createElement("canvas");
+      canvas.width = 1080; canvas.height = 1080;
+      const ctx2d = canvas.getContext("2d");
+      ctx2d.fillStyle = "#ffffff";
+      ctx2d.fillRect(0, 0, 1080, 1080);
+      const blob = new Blob([svgString], { type: "image/svg+xml" });
+      const url = URL.createObjectURL(blob);
+      const img = new Image();
+      img.onload = () => {
+        ctx2d.drawImage(img, 0, 0, 1080, 1080);
+        canvas.toBlob(pngBlob => {
+          const a = document.createElement("a");
+          a.href = URL.createObjectURL(pngBlob);
+          a.download = filename;
+          a.click();
+          URL.revokeObjectURL(url);
+          resolve();
+        }, "image/png");
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); resolve(); };
+      img.src = url;
+    });
   }
 
   async function generateAndDownloadCards() {
@@ -433,65 +657,12 @@ Return JSON only. Schema: { "graf": "exactly 3 sentences under 55 words" }`
       columnGraf = `${winnerObj.last} landed the move that mattered. ${loserObj.last} never answered it. That silence was the fight.`;
     }
 
-    function wrapText(str, maxChars) {
-      const words = (str || "").split(" ");
-      const lines = [];
-      let cur = "";
-      words.forEach(w => {
-        if ((cur + " " + w).trim().length > maxChars) { lines.push(cur.trim()); cur = w; }
-        else { cur = (cur + " " + w).trim(); }
-      });
-      if (cur) lines.push(cur.trim());
-      return lines;
-    }
-
-    // FIX B: fetch portraits as blob data URLs — cross-origin <image href> fails in blob-URL SVGs
-    async function fetchPortraitDataURL(url) {
-      try {
-        const r = await fetch(url, { mode: "cors" });
-        if (!r.ok) return null;
-        const blob = await r.blob();
-        return new Promise((resolve) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result);
-          reader.onerror = () => resolve(null);
-          reader.readAsDataURL(blob);
-        });
-      } catch (e) { return null; }
-    }
-
     const [winnerDataURL, loserDataURL] = await Promise.all([
       fetchPortraitDataURL(`https://aoa.milochao.com/portraits/${winnerObj.id}.png`),
       fetchPortraitDataURL(`https://aoa.milochao.com/portraits/${loserObj.id}.png`),
     ]);
     const winnerPortrait = winnerDataURL || `https://aoa.milochao.com/portraits/${winnerObj.id}.png`;
     const loserPortrait = loserDataURL || `https://aoa.milochao.com/portraits/${loserObj.id}.png`;
-
-    async function renderCard(svgString, filename) {
-      return new Promise((resolve) => {
-        const canvas = document.createElement("canvas");
-        canvas.width = 1080; canvas.height = 1080;
-        const ctx2d = canvas.getContext("2d");
-        ctx2d.fillStyle = "#ffffff";
-        ctx2d.fillRect(0, 0, 1080, 1080);
-        const blob = new Blob([svgString], { type: "image/svg+xml" });
-        const url = URL.createObjectURL(blob);
-        const img = new Image();
-        img.onload = () => {
-          ctx2d.drawImage(img, 0, 0, 1080, 1080);
-          canvas.toBlob(pngBlob => {
-            const a = document.createElement("a");
-            a.href = URL.createObjectURL(pngBlob);
-            a.download = filename;
-            a.click();
-            URL.revokeObjectURL(url);
-            resolve();
-          }, "image/png");
-        };
-        img.onerror = () => { URL.revokeObjectURL(url); resolve(); };
-        img.src = url;
-      });
-    }
 
     // FIX C: topic at 36px wrapped at 38 chars; quote wrapped at 28 chars per line, max 2 lines
     const topicLines = wrapText(debateTopic, 38);
@@ -611,6 +782,69 @@ Return JSON only. Schema: { "graf": "exactly 3 sentences under 55 words" }`
 
     setCardGenerating(false);
 }
+
+  // Third Chair card: single frame. Figure portrait, verdict, survival score,
+  // the unanswered question as the hook line. The student is the subject —
+  // shareable in the first person, no second figure to contrast against.
+  async function generateAndDownloadSparCard() {
+    if (!slotAObj || !verdict) return;
+    setCardGenerating(true);
+    try {
+      const survived = verdict.verdict === "pass" || verdict.verdict === "survived";
+      const verdictLabel = survived ? "SURVIVED" : "DID NOT SURVIVE";
+      const hook = verdict.unanswered || "";
+      const posText = position.trim();
+
+      const portraitDataURL = await fetchPortraitDataURL(`https://aoa.milochao.com/portraits/${slotAObj.id}.png`);
+      const portrait = portraitDataURL || `https://aoa.milochao.com/portraits/${slotAObj.id}.png`;
+
+      const positionLines = wrapText(posText, 42).slice(0, 3);
+      const positionLineH = 32;
+      const positionSVG = positionLines.map((l, i) =>
+        `<text x="56" y="${96 + i * positionLineH}" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="24" font-style="italic" opacity="0.75">${l}</text>`
+      ).join("\n");
+      const ruleY = 128 + positionLines.length * positionLineH;
+
+      const hookLines = wrapText(hook, 26).slice(0, 3);
+      const hookSVG = hookLines.map((l, i) =>
+        `<text x="56" y="${840 + i * 50}" fill="#ffffff" font-family="Arial Black, Arial, sans-serif" font-size="38" font-weight="900" letter-spacing="-1">${l}</text>`
+      ).join("\n");
+
+      const svg = `<svg viewBox="0 0 1080 1080" xmlns="http://www.w3.org/2000/svg" width="1080" height="1080">
+  <defs>
+    <linearGradient id="sfb" x1="0" y1="0" x2="0" y2="1"><stop offset="20%" stop-color="#080808" stop-opacity="0"/><stop offset="100%" stop-color="#080808" stop-opacity="1"/></linearGradient>
+    <linearGradient id="sfr" x1="0" y1="0" x2="1" y2="0"><stop offset="30%" stop-color="#080808" stop-opacity="0"/><stop offset="100%" stop-color="#080808" stop-opacity="1"/></linearGradient>
+    <linearGradient id="sft" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#080808" stop-opacity="1"/><stop offset="100%" stop-color="#080808" stop-opacity="0"/></linearGradient>
+    <filter id="sbw"><feColorMatrix type="saturate" values="0"/></filter>
+  </defs>
+  <rect width="1080" height="1080" fill="#080808"/>
+  <image href="${portrait}" x="120" y="${ruleY}" width="960" height="${1080 - ruleY}" filter="url(#sbw)" preserveAspectRatio="xMidYMin slice" opacity="0.85"/>
+  <rect x="0" y="${ruleY}" width="1080" height="${1080 - ruleY}" fill="url(#sfr)"/>
+  <rect x="0" y="${ruleY}" width="1080" height="${1080 - ruleY}" fill="url(#sfb)"/>
+  <rect x="0" y="${ruleY - 30}" width="1080" height="130" fill="url(#sft)"/>
+  <rect x="0" y="0" width="1080" height="5" fill="#ffffff"/>
+  <rect x="0" y="5" width="1080" height="${ruleY}" fill="#080808"/>
+  <text x="56" y="44" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="700" letter-spacing="4" opacity="0.35">THE ANATOMY OF ADVERTISING &#183; THIRD CHAIR</text>
+  ${positionSVG}
+  <rect x="56" y="${ruleY - 4}" width="968" height="1" fill="#ffffff" opacity="0.12"/>
+  <text x="56" y="700" fill="${survived ? "#5FBE7A" : "#FF6B4A"}" font-family="Arial Black, Arial, sans-serif" font-size="46" font-weight="900" letter-spacing="-1">${verdictLabel}</text>
+  <text x="56" y="740" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="700" letter-spacing="3" opacity="0.5">${verdict.survivalScore}/100 &#183; THREE ROUNDS AGAINST ${slotAObj.last.toUpperCase()}</text>
+  <rect x="56" y="770" width="968" height="1" fill="#ffffff" opacity="0.12"/>
+  <text x="56" y="800" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="700" letter-spacing="3" opacity="0.4">THE QUESTION I NEVER ANSWERED</text>
+  ${hookSVG}
+  <rect x="0" y="1018" width="1080" height="62" fill="#000000" opacity="0.7"/>
+  <text x="56" y="1055" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="700" letter-spacing="2" opacity="0.3">AOA.MILOCHAO.COM</text>
+  <text x="1024" y="1055" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="700" letter-spacing="2" text-anchor="end" opacity="0.3">THIRD CHAIR</text>
+</svg>`;
+
+      await renderCard(svg, `aoa-third-chair-${slotAObj.id}.png`);
+    } catch (e) {
+      console.error("Spar card export failed:", e);
+    } finally {
+      setCardGenerating(false);
+    }
+  }
+
   async function callClaude(prompt, maxTokens = 1500, model = "claude-sonnet-4-6", debatePair = null) {
     const res = await fetch("/api/claude", {
       method:"POST",
@@ -660,6 +894,130 @@ Return JSON only. Schema: { "graf": "exactly 3 sentences under 55 words" }`
     return turnObj;
   }
 
+  // Generic action call (score_debate, score_student, ...): posts { action, ...payload },
+  // parses the JSON object out of the model's text reply. Shares the JSON-envelope
+  // parsing logic with callClaude but never builds the judging prompt itself —
+  // that lives server-side so the private per-figure standard never crosses the wire.
+  async function callClaudeAction(action, payload) {
+    const res = await fetch("/api/claude", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, ...payload }),
+    });
+    if (res.status === 429) {
+      let body = {};
+      try { body = await res.json(); } catch {}
+      const err = new Error(body.message || "The reading room is full for today.");
+      err.code = body.error || "rate_limited";
+      err.userMessage = body.message;
+      throw err;
+    }
+    if (!res.ok) {
+      let body = {};
+      try { body = await res.json(); } catch {}
+      throw new Error(body.error || `Server error ${res.status}`);
+    }
+    const data = await res.json();
+    const text = data.content.filter(b=>b.type==="text").map(b=>b.text).join("");
+    const clean = text.replace(/```json/gi,"").replace(/```/g,"").trim();
+    const firstBrace = clean.indexOf("{");
+    const lastBrace = clean.lastIndexOf("}");
+    if (firstBrace >= 0 && lastBrace > firstBrace) {
+      try { return JSON.parse(clean.slice(firstBrace, lastBrace + 1)); } catch (e) { /* fall through */ }
+    }
+    throw new Error("Could not parse the response");
+  }
+
+  // Streams a figure's spoken turn token by token. The Worker pipes Anthropic's
+  // SSE body straight through; this reads it and calls onDelta with the
+  // accumulated text as it arrives, so the UI can render a live cursor.
+  async function streamClaudeTurn({ prompt, maxTokens = 700, debatePair, onDelta }) {
+    const res = await fetch("/api/claude", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-6",
+        max_tokens: maxTokens,
+        messages: [{ role: "user", content: prompt }],
+        ...(debatePair ? { debatePair } : {}),
+        stream: true,
+      }),
+    });
+    if (!res.ok || !res.body) {
+      let errBody = {};
+      try { errBody = await res.json(); } catch {}
+      if (res.status === 429) {
+        const err = new Error(errBody.message || "The reading room is full for today.");
+        err.code = errBody.error || "rate_limited";
+        err.userMessage = errBody.message;
+        throw err;
+      }
+      throw new Error(errBody.error || `Server error ${res.status}`);
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = "";
+    let text = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const lines = buf.split("\n");
+      buf = lines.pop();
+      for (const line of lines) {
+        if (!line.startsWith("data:")) continue;
+        const dataStr = line.slice(5).trim();
+        if (!dataStr || dataStr === "[DONE]") continue;
+        let evt;
+        try { evt = JSON.parse(dataStr); } catch (e) { continue; }
+        if (evt.type === "content_block_delta" && evt.delta && evt.delta.type === "text_delta") {
+          text += evt.delta.text;
+          if (onDelta) onDelta(text);
+        } else if (evt.type === "error") {
+          throw new Error((evt.error && evt.error.message) || "Streaming error");
+        }
+      }
+    }
+    return text.trim();
+  }
+
+  // Post-stream anchor check: pure string match, server-side, no Anthropic call.
+  // Returns null (no badge) when the figure has no case list or the turn cited none.
+  async function checkAnchors(speakerId, text) {
+    if (!speakerId) return null;
+    try {
+      const res = await fetch("/api/claude", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "check_anchors", speaker: speakerId, text }),
+      });
+      if (!res.ok) return null;
+      const data = await res.json();
+      return data && data.total ? data : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // Streams a spoken turn into the live `streamingTurn` state (so the transcript
+  // shows a cursor as it arrives), then finalizes it into a plain turn object
+  // once the stream ends and the post-stream anchor check has run.
+  async function speakTurn({ speakerKey, prompt, maxTokens, debatePair, speakerId }) {
+    setStreamingTurn({ speaker: speakerKey, text: "" });
+    let finalText = "";
+    try {
+      finalText = await streamClaudeTurn({
+        prompt, maxTokens, debatePair,
+        onDelta: (text) => setStreamingTurn({ speaker: speakerKey, text }),
+      });
+    } finally {
+      setStreamingTurn(null);
+    }
+    const anchors = await checkAnchors(speakerId, finalText);
+    return { speaker: speakerKey, text: finalText, anchors };
+  }
+
   function transcriptText(turns, aObj, bObj) {
     return turns.map(t => {
       if (t.speaker === "host") return `HOST (to ${t.target}): ${t.text}`;
@@ -686,8 +1044,11 @@ ${prior ? `THE EXCHANGE SO FAR:\n${prior}\n\n` : ''}You are now speaking as ${sp
 
 ${openingInstruction}`;
 
-    const result = await callClaude(prompt, 600, "claude-sonnet-4-6", { a: aObj.id, b: bObj.id, speaker: speaker.id, topic: topic });
-    return { speaker: speakerKey, text: result.text, anchors: result._anchors || null };
+    return speakTurn({
+      speakerKey, prompt, maxTokens: 600,
+      debatePair: { a: aObj.id, b: bObj.id, speaker: speaker.id, topic: topic },
+      speakerId: speaker.id,
+    });
   }
 
   async function refereeAndMaybeRegenerate({ turn, speakerKey, aObj, bObj, topic, priorTurns, isOpening }) {
@@ -727,8 +1088,11 @@ You are now speaking as ${speaker.first} ${speaker.last}.
 
 You must respond to ${opponent.last}'s most recent point directly. Quote a phrase from it. Disagree with it specifically. Do not restate your existing position. Do not change the subject. 2 to 4 sentences.`;
 
-      const fixed = await callClaude(fixPrompt, 600, "claude-sonnet-4-6", { a: aObj.id, b: bObj.id, speaker: speaker.id, topic: topic });
-      return { speaker: speakerKey, text: fixed.text, anchors: fixed._anchors || null };
+      return await speakTurn({
+        speakerKey, prompt: fixPrompt, maxTokens: 600,
+        debatePair: { a: aObj.id, b: bObj.id, speaker: speaker.id, topic: topic },
+        speakerId: speaker.id,
+      });
     } catch (e) {
       return turn;
     }
@@ -741,97 +1105,10 @@ You must respond to ${opponent.last}'s most recent point directly. Quote a phras
       return `[turn ${i+1}] ${who}: ${t.text}`;
     }).join("\n\n");
 
-    // Fetch each figure's own judging standard from the Worker (dossier test fields).
-    // Best-effort: if the call fails, scoring proceeds without per-figure standards.
-    let standardA = null, standardB = null;
-    try {
-      const stdRes = await fetch("/api/claude", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "get_standards", a: aObj.id, b: bObj.id }),
-      });
-      if (stdRes.ok) {
-        const stdData = await stdRes.json();
-        standardA = stdData.standardA || null;
-        standardB = stdData.standardB || null;
-      }
-    } catch (e) { /* proceed without standards */ }
-
-    const perFigureBlock = (standardA || standardB) ? `
-SCORE THREE — PER-FIGURE SCORING. Judge each figure by their own standard, not a neutral rubric.
-
-${standardA ? `${aObj.last.toUpperCase()}'S OWN STANDARD:
-${standardA}
-
-Judge ${aObj.last}'s turns against this standard. Did their arguments survive it? Where did they fall short of their own criteria? One concrete verdict, two sentences maximum.` : ""}
-
-${standardB ? `${bObj.last.toUpperCase()}'S OWN STANDARD:
-${standardB}
-
-Judge ${bObj.last}'s turns against this standard. Did their arguments survive it? Where did they fall short of their own criteria? One concrete verdict, two sentences maximum.` : ""}
-
-Use these per-figure verdicts to sharpen the OPEN GROUND section. The open ground for each figure should name what their own standard would flag as unfinished, not what a neutral observer would note as missing.` : "";
-
-    const prompt = `You are a referee scoring a simulated debate between two figures from advertising history. The simulation is a reconstruction, not direct quotation. Your job is to score three things, in editorial register.
-
-FIGURE A: ${aObj.first} ${aObj.last} (${aObj.year})
-A's documented position and work: ${aObj.bio}
-
-FIGURE B: ${bObj.first} ${bObj.last} (${bObj.year})
-B's documented position and work: ${bObj.bio}
-
-TOPIC: ${topic}
-
-TRANSCRIPT:
-${transcript}
-
-SCORE ONE — ROOM SCORE (0-100). How well did this function as a real argument? Score five dimensions, each 0-20:
-- engagement: Did each turn respond to the prior turn, or monologue past it?
-- specificity: Did each speaker reference their own work concretely, or stay abstract?
-- concession: Did either speaker grant a real point, or did they hold their position untouched?
-- escalation: Did the argument get sharper across turns, or did it flatten?
-- productiveness: Did the exchange surface real intellectual ground, or rehash known positions?
-Sum the five for the Room Score.
-
-SCORE TWO — VOICE FIDELITY (0-100 per figure). How close did the reconstruction sit to the documented record for each figure? For each speaker, evaluate:
-- Did they reference something concrete from their actual work, methods, or examples?
-- Did the register match their period and idiom?
-- Were factual claims consistent with what they actually published?
-Score each figure 0-100 independently. Tier-three figures with limited firsthand record will score lower. That is correct and surfaces the disclaimer.
-${perFigureBlock}
-MOVE OF THE ROUND: Identify the single sharpest turn in the exchange. Give the turn number, the speaker (A or B), and one sentence on why it landed. Quote a phrase under 12 words from the turn itself.
-
-OPEN GROUND: For each figure, in one sentence, what does their own standard reveal as unfinished in this exchange? If per-figure standards were provided, use them. Be specific. Not generic.
-
-Return JSON only. No preamble. No fences. Schema:
-{
-  "roomScore": number,
-  "rubric": {
-    "engagement": number,
-    "specificity": number,
-    "concession": number,
-    "escalation": number,
-    "productiveness": number
-  },
-  "roomNote": "one short editorial sentence summarizing the exchange",
-  "voiceFidelityA": number,
-  "voiceFidelityB": number,
-  "voiceNoteA": "one short note on A's reconstruction",
-  "voiceNoteB": "one short note on B's reconstruction",
-  "perFigureA": "one sentence verdict on A by their own standard, or null if no standard available",
-  "perFigureB": "one sentence verdict on B by their own standard, or null if no standard available",
-  "moveOfRound": {
-    "turnIndex": number,
-    "speaker": "A or B (one letter)",
-    "quote": "phrase from that turn, under 12 words",
-    "reason": "one sentence on why it landed"
-  },
-  "openGroundA": "one sentence on what A's own standard would flag as unfinished",
-  "openGroundB": "one sentence on what B's own standard would flag as unfinished"
-}`;
-
-    const result = await callClaude(prompt, 1400);
-    return result;
+    // The judging prompt (including each figure's private test-field standard)
+    // is built entirely server-side now. The client sends only ids, topic, and
+    // the already-visible transcript — the standard itself never crosses the wire.
+    return callClaudeAction("score_debate", { a: aObj.id, b: bObj.id, topic, transcript });
   }
 
   async function scoreCurrentExchange(turnsArg, aObj, bObj, topic) {
@@ -973,8 +1250,11 @@ ${prior ? `THE EXCHANGE SO FAR:\n${prior}\n\n` : ''}You are now speaking as ${sp
 
 ${constraint}`;
 
-        const result = await callClaude(turnPrompt, 700, "claude-sonnet-4-6", { a: slotAObj.id, b: slotBObj.id, speaker: speaker.id, topic: exchange.topic });
-        let turn = { speaker: speakerKey, text: result.text, anchors: result._anchors || null };
+        let turn = await speakTurn({
+          speakerKey, prompt: turnPrompt, maxTokens: 700,
+          debatePair: { a: slotAObj.id, b: slotBObj.id, speaker: speaker.id, topic: exchange.topic },
+          speakerId: speaker.id,
+        });
 
         if (i > 0) {
           setLoadingText(`Checking that ${speaker.last} actually responded.`);
@@ -1081,8 +1361,11 @@ You are now speaking as ${challenger.first} ${challenger.last}. The host wants y
 
 Push back. Name the weakness in ${defenderName}'s last point. Quote a phrase from it if you must. Be sharp, not rude. 2 to 4 sentences.`;
 
-      const challengeResult = await callClaude(challengePrompt, 600, "claude-sonnet-4-6", { a: slotAObj.id, b: slotBObj.id, speaker: challenger.id, topic: exchange.topic });
-      const challengeTurn = { speaker: challengerKey, text: challengeResult.text, anchors: challengeResult._anchors || null };
+      const challengeTurn = await speakTurn({
+        speakerKey: challengerKey, prompt: challengePrompt, maxTokens: 600,
+        debatePair: { a: slotAObj.id, b: slotBObj.id, speaker: challenger.id, topic: exchange.topic },
+        speakerId: challenger.id,
+      });
       working = [...working, challengeTurn];
       setExchange({ ...exchange, turns: working });
       setVisibleTurns(working.length);
@@ -1144,8 +1427,11 @@ ${prior}
 
 You are now speaking as ${target.first} ${target.last}. The host has just put a question to you. Answer it directly, in your voice. 2 to 4 sentences. Concrete. No hedging.`;
 
-      const answerResult = await callClaude(answerPrompt, 600, "claude-sonnet-4-6", { a: slotAObj.id, b: slotBObj.id, speaker: target.id, topic: exchange.topic });
-      const answerTurn = { speaker: targetKey, text: answerResult.text, anchors: answerResult._anchors || null };
+      const answerTurn = await speakTurn({
+        speakerKey: targetKey, prompt: answerPrompt, maxTokens: 600,
+        debatePair: { a: slotAObj.id, b: slotBObj.id, speaker: target.id, topic: exchange.topic },
+        speakerId: target.id,
+      });
       working = [...working, answerTurn];
       setExchange({ ...exchange, turns: working });
       setVisibleTurns(working.length);
@@ -1192,10 +1478,13 @@ You are now speaking as ${target.first} ${target.last}. The host has just put a 
             thinkerById={thinkerById}
             onWarmStart={warmStart}
             onOpenMap={goMap}
+            onOpenSpar={goSpar}
+            record={record}
           />
         )}
         {phase === "map" && (
           <MapScreen
+            mode={mode}
             slotA={slotA} slotB={slotB}
             hoveredId={hoveredId}
             hoveredObj={hoveredObj}
@@ -1206,7 +1495,16 @@ You are now speaking as ${target.first} ${target.last}. The host has just put a 
             onBegin={() => setPhase("composition")}
           />
         )}
-        {phase === "composition" && (
+        {phase === "composition" && mode === "spar" && (
+          <SparCompositionScreen
+            slotAObj={slotAObj}
+            position={position} setPosition={setPosition}
+            onBegin={beginSpar}
+            onSwapA={swapSparFigure}
+            onLeave={goArrival}
+          />
+        )}
+        {phase === "composition" && mode !== "spar" && (
           <CompositionScreen
             slotAObj={slotAObj} slotBObj={slotBObj}
             topic={topic} setTopic={setTopic}
@@ -1216,12 +1514,33 @@ You are now speaking as ${target.first} ${target.last}. The host has just put a 
             onLeave={goArrival}
           />
         )}
+        {phase === "spar" && (
+          <SparScreen
+            slotAObj={slotAObj}
+            position={position}
+            sparTurns={sparTurns}
+            loadingText={loadingText}
+            streamingTurn={streamingTurn}
+            error={error}
+            sparStudentInput={sparStudentInput}
+            setSparStudentInput={setSparStudentInput}
+            onSubmitSparTurn={submitSparTurn}
+            verdict={verdict}
+            verdictLoading={verdictLoading}
+            verdictError={verdictError}
+            onNewSpar={newSpar}
+            onDownloadCard={generateAndDownloadSparCard}
+            cardGenerating={cardGenerating}
+            onLeave={goArrival}
+          />
+        )}
         {phase === "exchange" && (
           <ExchangeScreen
             slotAObj={slotAObj} slotBObj={slotBObj}
             exchange={exchange}
             visibleTurns={visibleTurns}
             loadingText={loadingText}
+            streamingTurn={streamingTurn}
             error={error}
             followUpFor={followUpFor}
             followUpText={followUpText}
@@ -1672,7 +1991,12 @@ function CanonSurfer({ thinkers }) {
   );
 }
 
-function ArrivalScreen({ warmStarts, thinkerById, onWarmStart, onOpenMap }) {
+function ArrivalScreen({ warmStarts, thinkerById, onWarmStart, onOpenMap, onOpenSpar, record }) {
+  const figuresFaced = record ? Object.keys(record).length : 0;
+  const figuresSurvived = record
+    ? Object.values(record).filter(r => r.lastVerdict === "pass" || r.lastVerdict === "survived").length
+    : 0;
+
   return (
     <section className="arrival-v2">
       <DotFieldBg />
@@ -1697,7 +2021,17 @@ function ArrivalScreen({ warmStarts, thinkerById, onWarmStart, onOpenMap }) {
             Choose your two
             <span className="rp-arrow">→</span>
           </button>
+          <button className="rp-start rp-start-secondary" onClick={onOpenSpar}>
+            Take the third chair
+            <span className="rp-arrow">→</span>
+          </button>
         </div>
+
+        {figuresFaced > 0 && (
+          <p className="arrival-v2-record">
+            Faced {figuresFaced} figure{figuresFaced === 1 ? "" : "s"}. Survived {figuresSurvived}.
+          </p>
+        )}
 
         <p className="arrival-v2-foot">
           <em>Reconstructions, not quotations.</em> Thirty-two figures from Aristotle to Kahneman, modeled on the documented record.
@@ -1710,7 +2044,9 @@ function ArrivalScreen({ warmStarts, thinkerById, onWarmStart, onOpenMap }) {
 // ============================================================
 // MAP — subway map preserved, palette and chrome moved to playful
 // ============================================================
-function MapScreen({ slotA, slotB, hoveredId, hoveredObj, onTap, onHover, onClear, onLeave, onBegin }) {
+function MapScreen({ mode, slotA, slotB, hoveredId, hoveredObj, onTap, onHover, onClear, onLeave, onBegin }) {
+  const singleSlot = mode === "spar";
+  const ready = singleSlot ? !!slotA : !!(slotA && slotB);
   const stations = THINKERS.map(t => ({
     ...t, x: COL_X[t.col], y: ROW_Y[t.tradition] + (t.offsetY || 0),
   }));
@@ -1719,23 +2055,29 @@ function MapScreen({ slotA, slotB, hoveredId, hoveredObj, onTap, onHover, onClea
     <section className="map-screen">
       <div className="map-intro">
         <p className="map-intro-text">
-          <em>The Anatomy of Advertising</em> maps an argument that's been running since Aristotle. Eight lenses, thirty-two voices. Pick two to set them against each other.
+          {singleSlot
+            ? <><em>Take the third chair.</em> Pick the one figure whose standard you'll be held to.</>
+            : <><em>The Anatomy of Advertising</em> maps an argument that's been running since Aristotle. Eight lenses, thirty-two voices. Pick two to set them against each other.</>}
         </p>
       </div>
 
       <div className="map-prelude">
         <div className="map-prelude-pill">
           <span className="live-dot"></span>
-          {!slotA && !slotB && <span>Pick two figures</span>}
-          {slotA && !slotB && <span>One picked. Pick one more.</span>}
-          {slotA && slotB && <span>Both picked. Begin when ready.</span>}
+          {singleSlot
+            ? (!slotA ? <span>Pick one figure</span> : <span>Picked. Begin when ready.</span>)
+            : (<>
+                {!slotA && !slotB && <span>Pick two figures</span>}
+                {slotA && !slotB && <span>One picked. Pick one more.</span>}
+                {slotA && slotB && <span>Both picked. Begin when ready.</span>}
+              </>)}
         </div>
         {(slotA || slotB) && (
           <button onClick={onClear} className="map-clear-btn">Clear</button>
         )}
       </div>
 
-      {slotA && slotB && (
+      {ready && (
         <div className="map-begin-bar">
           <button onClick={onBegin} className="map-begin-btn">
             <span>Begin</span>
@@ -2014,10 +2356,70 @@ function CompositionScreen({ slotAObj, slotBObj, topic, setTopic, onBegin, onSwa
 }
 
 // ============================================================
+// THIRD CHAIR — position statement, single-figure composition
+// ============================================================
+function SparCompositionScreen({ slotAObj, position, setPosition, onBegin, onSwapA, onLeave }) {
+  const tradA = slotAObj ? TRADITIONS[slotAObj.tradition] : null;
+  const trimmed = position.trim();
+  const canBegin = trimmed.length > 0 && trimmed.length <= 500;
+
+  if (!slotAObj) {
+    return (
+      <section className="composition">
+        <p className="composition-empty">Pick a figure to take the third chair against.</p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="composition spar-composition">
+      <div className="composition-room spar-composition-room">
+        <div className="comp-card-wrap comp-card-a">
+          <button className="comp-card" onClick={onSwapA} style={{ ['--trad']: tradA.color }} aria-label="Change figure">
+            <div className="comp-card-photo">
+              {hasPortrait(slotAObj) && <img src={portraitURL(slotAObj.id)} alt="" />}
+            </div>
+            <div className="comp-card-meta">
+              <div className="comp-card-trad">{tradA.label}</div>
+              <div className="comp-card-name">
+                <span className="comp-first">{slotAObj.first}</span>
+                <span className="comp-last">{slotAObj.last}</span>
+              </div>
+              <div className="comp-card-year">{slotAObj.year}</div>
+            </div>
+            <div className="comp-card-swap">change</div>
+          </button>
+          <ConfidenceNote conf={getConfidence(slotAObj)} align="right" />
+        </div>
+      </div>
+
+      <div className="composition-actions is-ready spar-position-actions">
+        <p className="composition-prompt">
+          State the position you will defend. A brand claim, a strategy, a belief about how advertising works.
+        </p>
+        <textarea
+          className="composition-input spar-position-input"
+          placeholder="Type the claim you're willing to defend for three rounds."
+          value={position}
+          maxLength={500}
+          onChange={(e) => setPosition(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && canBegin) onBegin(); }}
+          autoFocus
+        />
+        <div className="spar-char-count">{trimmed.length} / 500</div>
+        <button className="composition-begin" onClick={onBegin} disabled={!canBegin}>
+          Take the chair <span className="composition-arrow">→</span>
+        </button>
+      </div>
+    </section>
+  );
+}
+
+// ============================================================
 // EXCHANGE — turns arrive in time, controls as game actions
 // ============================================================
 function ExchangeScreen({
-  slotAObj, slotBObj, exchange, visibleTurns, loadingText, error,
+  slotAObj, slotBObj, exchange, visibleTurns, loadingText, streamingTurn, error,
   followUpFor, followUpText, setFollowUpFor, setFollowUpText, onSubmitFollowUp,
   onContinue, onPushBack, onChangeRoom, onLeave, onExport, exportFeedback,
   onDownloadCards, cardGenerating,
@@ -2034,11 +2436,11 @@ function ExchangeScreen({
 
   const transcriptRef = useRef(null);
   useEffect(() => {
-    if (transcriptRef.current && visibleTurns > 0) {
+    if (transcriptRef.current && (visibleTurns > 0 || streamingTurn)) {
       const last = transcriptRef.current.querySelector('.turn:last-child');
       if (last) last.scrollIntoView({ behavior: "smooth", block: "end" });
     }
-  }, [visibleTurns]);
+  }, [visibleTurns, streamingTurn]);
 
   if (!slotAObj || !slotBObj) return null;
 
@@ -2086,7 +2488,9 @@ function ExchangeScreen({
           return <Turn key={i} turn={turn} speaker={speaker} trad={trad} />;
         })}
 
-        {exchange && loadingText && (
+        {exchange && <StreamingTurn streamingTurn={streamingTurn} slotAObj={slotAObj} slotBObj={slotBObj} />}
+
+        {exchange && loadingText && !streamingTurn && (
           <div className="exchange-loading exchange-loading-inline">
             <p>{loadingText}</p>
           </div>
@@ -2267,7 +2671,17 @@ function ParticipantLine({ thinker, trad, dim, align }) {
   );
 }
 
-function Turn({ turn, speaker, trad }) {
+// Renders whichever figure is currently mid-stream, if any. Returns null once
+// the turn finalizes (streamingTurn clears back to null in speakTurn's finally).
+function StreamingTurn({ streamingTurn, slotAObj, slotBObj }) {
+  if (!streamingTurn || (streamingTurn.speaker !== "A" && streamingTurn.speaker !== "B")) return null;
+  const speaker = streamingTurn.speaker === "A" ? slotAObj : slotBObj;
+  if (!speaker) return null;
+  const trad = TRADITIONS[speaker.tradition];
+  return <Turn turn={streamingTurn} speaker={speaker} trad={trad} streaming />;
+}
+
+function Turn({ turn, speaker, trad, streaming }) {
   const isA = turn.speaker === "A";
   const portrait = hasPortrait(speaker);
   return (
@@ -2279,7 +2693,7 @@ function Turn({ turn, speaker, trad }) {
         <span className="turn-name">{speaker.last}</span>
         <span className="turn-meta">{speaker.year} · {trad.label}</span>
       </header>
-      <p className="turn-body">{turn.text}</p>
+      <p className="turn-body">{turn.text}{streaming && <span className="turn-cursor" aria-hidden="true"></span>}</p>
     </article>
   );
 }
@@ -2555,6 +2969,196 @@ function HostTurn({ text, target }) {
       <div className="host-turn-label">Host, to {target}</div>
       <p className="host-turn-body">{text}</p>
     </div>
+  );
+}
+
+function StudentTurn({ text }) {
+  return (
+    <div className="host-turn student-turn">
+      <div className="host-turn-label">You</div>
+      <p className="host-turn-body">{text}</p>
+    </div>
+  );
+}
+
+// ============================================================
+// THIRD CHAIR — alternating exchange + verdict
+// ============================================================
+function SparScreen({
+  slotAObj, position, sparTurns, loadingText, streamingTurn, error,
+  sparStudentInput, setSparStudentInput, onSubmitSparTurn,
+  verdict, verdictLoading, verdictError, onNewSpar, onDownloadCard, cardGenerating, onLeave,
+}) {
+  const tradA = slotAObj ? TRADITIONS[slotAObj.tradition] : null;
+  const transcriptRef = useRef(null);
+
+  useEffect(() => {
+    if (transcriptRef.current) {
+      const nodes = transcriptRef.current.querySelectorAll('.turn, .host-turn');
+      const last = nodes[nodes.length - 1];
+      if (last) last.scrollIntoView({ behavior: "smooth", block: "end" });
+    }
+  }, [sparTurns.length, streamingTurn]);
+
+  if (!slotAObj) return null;
+
+  const figureCount = sparTurns.filter(t => t.speaker === "A").length;
+  const done = !!verdict || verdictLoading || !!verdictError;
+  const awaitingStudent = !done && !loadingText && !streamingTurn
+    && figureCount < 3 && sparTurns.length > 0
+    && sparTurns[sparTurns.length - 1].speaker === "A";
+  const studentTrimmed = sparStudentInput.trim();
+
+  return (
+    <section className="exchange spar-exchange">
+      <header className="exchange-masthead spar-masthead">
+        <ParticipantLine thinker={slotAObj} trad={tradA} dim={false} align="left" />
+        <div className="exchange-topic">
+          <div className="exchange-topic-label">Third chair · round {Math.min(figureCount + 1, 3)} of 3</div>
+          <div className="exchange-topic-text">{position}</div>
+        </div>
+        <div className="participant part-right" style={{ ['--trad']: tradA.color, textAlign: "right" }}>
+          <div className="participant-meta">Defending</div>
+          <div className="participant-name">
+            <span className="participant-last">You</span>
+          </div>
+        </div>
+      </header>
+
+      <p className="exchange-disclaimer">
+        Reconstruction. {slotAObj.last}'s voice approximated from published work. Held to their own documented standard, scored after three rounds.
+      </p>
+
+      <div className="exchange-body" ref={transcriptRef}>
+        {error && <p className="exchange-error">{error}</p>}
+
+        {sparTurns.map((t, i) => (
+          t.speaker === "student"
+            ? <StudentTurn key={i} text={t.text} />
+            : <Turn key={i} turn={t} speaker={slotAObj} trad={tradA} />
+        ))}
+
+        <StreamingTurn streamingTurn={streamingTurn} slotAObj={slotAObj} slotBObj={null} />
+
+        {loadingText && !streamingTurn && (
+          <div className="exchange-loading exchange-loading-inline">
+            <p>{loadingText}</p>
+          </div>
+        )}
+      </div>
+
+      {done && (
+        <SparVerdict
+          verdict={verdict}
+          loading={verdictLoading}
+          error={verdictError}
+          slotAObj={slotAObj}
+          tradA={tradA}
+          onNewSpar={onNewSpar}
+          onDownloadCard={onDownloadCard}
+          cardGenerating={cardGenerating}
+        />
+      )}
+
+      {awaitingStudent && (
+        <footer className="exchange-controls spar-input-footer">
+          <textarea
+            className="spar-turn-input"
+            value={sparStudentInput}
+            onChange={(e) => setSparStudentInput(e.target.value)}
+            maxLength={500}
+            placeholder={`Respond to ${slotAObj.last}.`}
+            onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && studentTrimmed) onSubmitSparTurn(); }}
+            autoFocus
+          />
+          <div className="spar-turn-actions">
+            <div className="spar-char-count">{studentTrimmed.length} / 500</div>
+            <button className="composition-begin spar-turn-submit" onClick={onSubmitSparTurn} disabled={!studentTrimmed}>
+              Respond <span className="composition-arrow">→</span>
+            </button>
+          </div>
+        </footer>
+      )}
+    </section>
+  );
+}
+
+function SparVerdict({ verdict, loading, error, slotAObj, tradA, onNewSpar, onDownloadCard, cardGenerating }) {
+  if (loading) {
+    return (
+      <div className="report-card report-card-loading">
+        <div className="report-card-label">{slotAObj.last} is weighing the verdict…</div>
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div className="report-card report-card-error">
+        <div className="report-card-label">Scoring failed</div>
+        <p className="report-card-error-msg">{error}</p>
+      </div>
+    );
+  }
+  if (!verdict) return null;
+
+  const verdictLabel = { pass: "Survived", survived: "Survived", fail: "Did not survive" }[verdict.verdict] || verdict.verdict;
+  const survived = verdict.verdict === "pass" || verdict.verdict === "survived";
+
+  return (
+    <section className="report-card spar-verdict" aria-label="Verdict">
+      <header className="report-card-head">
+        <div className="report-card-label">Verdict — held to {slotAObj.last}'s own standard</div>
+      </header>
+
+      <div className={`spar-verdict-headline ${survived ? "is-survived" : "is-fail"}`} style={{ ['--trad']: tradA.color }}>
+        <span className="spar-verdict-label">{verdictLabel}</span>
+        <span className="spar-verdict-score">{verdict.survivalScore}<em>/100</em></span>
+      </div>
+
+      {verdict.unanswered && (
+        <div className="spar-unanswered">
+          <div className="report-block-label">The question you never answered</div>
+          <p className="spar-unanswered-text">{verdict.unanswered}</p>
+        </div>
+      )}
+
+      {verdict.criteria && verdict.criteria.length > 0 && (
+        <div className="report-block">
+          <div className="report-block-label">Criteria, by {slotAObj.last}'s standard</div>
+          <ul className="spar-criteria-list">
+            {verdict.criteria.map((c, i) => (
+              <li key={i} className={`spar-criterion ${c.pass ? "is-pass" : "is-fail"}`}>
+                <span className="spar-criterion-mark">{c.pass ? "✓" : "✗"}</span>
+                <span className="spar-criterion-name">{c.name}</span>
+                {c.note && <span className="spar-criterion-note">{c.note}</span>}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {verdict.bestMove && verdict.bestMove.quote && (
+        <div className="report-move">
+          <div className="report-block-label">Your strongest move</div>
+          <blockquote className="report-move-quote" style={{ borderLeftColor: tradA.color }}>
+            "{verdict.bestMove.quote}"
+          </blockquote>
+          <div className="report-move-credit">
+            {verdict.bestMove.turnIndex ? <span>Turn {verdict.bestMove.turnIndex}</span> : null}
+            {verdict.bestMove.why && <em> — {verdict.bestMove.why}</em>}
+          </div>
+        </div>
+      )}
+
+      <footer className="exchange-controls">
+        <div className="exchange-controls-row">
+          <button className="ctrl ctrl-cards" onClick={onDownloadCard} disabled={cardGenerating}>
+            {cardGenerating ? <em>Building card…</em> : "Download card"}
+          </button>
+          <button className="ctrl" onClick={onNewSpar}>Spar again</button>
+        </div>
+      </footer>
+    </section>
   );
 }
 
@@ -2892,6 +3496,22 @@ function GlobalStyle() {
       }
       .rp-arrow { font-size: 16px; transition: transform 0.15s; }
       .rp-start:hover .rp-arrow { transform: translateX(3px); }
+      .rp-start-secondary {
+        background: var(--bg);
+        color: var(--ink);
+        box-shadow: 4px 4px 0 var(--ink);
+      }
+      .rp-start-secondary:hover {
+        box-shadow: 6px 6px 0 var(--ink);
+      }
+      .arrival-v2-record {
+        margin: 0 0 20px;
+        text-align: center;
+        font-family: 'Geist Mono', monospace;
+        font-size: 12px;
+        letter-spacing: 0.04em;
+        color: var(--mid);
+      }
       .rp-pick {
         background: none; border: none; padding: 6px 0;
         cursor: pointer;
@@ -3780,6 +4400,18 @@ function GlobalStyle() {
         font-size: 17px; line-height: 1.6;
         color: var(--ink); margin: 0;
       }
+      .turn-cursor {
+        display: inline-block;
+        width: 2px; height: 1em;
+        margin-left: 2px;
+        background: var(--trad, var(--ink));
+        vertical-align: text-bottom;
+        animation: turnCursorBlink 0.9s steps(1) infinite;
+      }
+      @keyframes turnCursorBlink {
+        0%, 49% { opacity: 1; }
+        50%, 100% { opacity: 0; }
+      }
 
       .host-turn {
         margin: 24px 0; padding: 16px 22px;
@@ -3880,6 +4512,97 @@ function GlobalStyle() {
         .exchange-masthead { grid-template-columns: 1fr; gap: 18px; text-align: left; }
         .turn-a, .turn-b { padding-left: 0; padding-right: 0; }
       }
+
+      /* ============================================================
+         THIRD CHAIR — spar composition, exchange, and verdict
+         ============================================================ */
+      .spar-composition-room {
+        display: flex; justify-content: center; margin-bottom: 40px;
+      }
+      .spar-position-actions { max-width: 620px; }
+      .spar-position-input {
+        border-radius: 18px;
+        min-height: 120px;
+        text-align: left;
+        line-height: 1.5;
+        resize: vertical;
+        padding: 18px 22px;
+      }
+      .spar-char-count {
+        font-family: 'Geist Mono', monospace;
+        font-size: 10px; letter-spacing: 0.08em;
+        color: var(--whisper);
+        text-align: right;
+        margin: 8px 4px 20px;
+      }
+
+      .student-turn {
+        border-left-color: var(--accent);
+        margin-left: 8%;
+      }
+      @media (max-width: 720px) { .student-turn { margin-left: 0; } }
+
+      .spar-input-footer { display: flex; flex-direction: column; }
+      .spar-turn-input {
+        width: 100%; background: var(--paper);
+        border: 1.5px solid var(--ink);
+        border-radius: 18px;
+        padding: 16px 20px;
+        font-family: 'Geist', sans-serif;
+        font-size: 15px; color: var(--ink);
+        line-height: 1.5;
+        min-height: 90px; resize: vertical;
+        outline: none;
+        box-shadow: 3px 3px 0 var(--ink);
+      }
+      .spar-turn-input::placeholder { color: var(--whisper); }
+      .spar-turn-actions {
+        display: flex; align-items: center; justify-content: space-between;
+        margin-top: 10px;
+      }
+      .spar-turn-submit:disabled { opacity: 0.35; cursor: not-allowed; }
+
+      .spar-verdict-headline {
+        display: flex; align-items: baseline; gap: 14px;
+        margin: 8px 0 28px;
+      }
+      .spar-verdict-label {
+        font-family: 'Instrument Serif', serif; font-style: italic;
+        font-size: 30px; color: var(--trad, var(--ink));
+      }
+      .spar-verdict-headline.is-fail .spar-verdict-label { color: var(--accent); }
+      .spar-verdict-score {
+        font-family: 'Geist Mono', monospace;
+        font-size: 22px; font-weight: 600; color: var(--ink);
+      }
+      .spar-verdict-score em { font-style: normal; font-size: 13px; color: var(--whisper); margin-left: 2px; }
+
+      .spar-unanswered {
+        margin: 0 0 32px;
+        padding: 24px 28px;
+        background: var(--ink);
+        border-radius: 6px;
+      }
+      .spar-unanswered .report-block-label { color: rgba(255,255,255,0.5); }
+      .spar-unanswered-text {
+        font-family: 'Instrument Serif', serif;
+        font-size: 24px; line-height: 1.35;
+        color: #fff; margin: 8px 0 0;
+      }
+
+      .spar-criteria-list { list-style: none; margin: 8px 0 0; padding: 0; }
+      .spar-criterion {
+        display: flex; align-items: baseline; gap: 10px;
+        padding: 8px 0;
+        border-bottom: 1px solid var(--rule);
+        font-family: 'Geist', sans-serif; font-size: 14px;
+      }
+      .spar-criterion:last-child { border-bottom: none; }
+      .spar-criterion-mark { font-weight: 700; }
+      .spar-criterion.is-pass .spar-criterion-mark { color: #2F8F4D; }
+      .spar-criterion.is-fail .spar-criterion-mark { color: var(--accent); }
+      .spar-criterion-name { font-weight: 600; color: var(--ink); }
+      .spar-criterion-note { color: var(--ink-quiet); font-style: italic; }
 
       /* ============================================================
          REPORT CARD — preserved from prior. Editorial register.

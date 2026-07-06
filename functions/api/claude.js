@@ -1234,7 +1234,27 @@ function dossierBlock(obj) {
   return parts.join("\n");
 }
 
-function buildDebateSystem(aObj, bObj) {
+// Shared voice rules. Streamed turns return plain text (no JSON envelope
+// possible mid-stream); non-streamed turns keep the JSON schema so the
+// anchor-retry logic downstream can parse and re-check them.
+function voiceRulesBlock(stream) {
+  const lines = [
+    `VOICE RULES (apply to whichever figure you are this turn):`,
+    `- Speak in that figure's voice, sounding like they would actually sound.`,
+    `- Practitioner register. Short declarative sentences. No hedging.`,
+    `- Concrete reference to your ideas, methods, work, or examples.`,
+    `- No pleasantries. No "I would argue." No academic puff. No em dashes.`,
+    `- Do not summarize the topic. Speak.`,
+  ];
+  lines.push(
+    stream
+      ? `- Return only your spoken turn as plain text. No JSON. No preamble. No fences.`
+      : `- Return JSON only. No preamble. No fences. Schema: { "text": "your turn" }`
+  );
+  return lines.join("\n");
+}
+
+function buildDebateSystem(aObj, bObj, opts = {}) {
   const text = [
     `You are role-playing a debate between two figures from advertising history. On each turn you will be told which one you are speaking as.`,
     ``,
@@ -1244,13 +1264,23 @@ function buildDebateSystem(aObj, bObj) {
     `FIGURE B is ${bObj.first} ${bObj.last}.`,
     dossierBlock(bObj),
     ``,
-    `VOICE RULES (apply to whichever figure you are this turn):`,
-    `- Speak in that figure's voice, sounding like they would actually sound.`,
-    `- Practitioner register. Short declarative sentences. No hedging.`,
-    `- Concrete reference to your ideas, methods, work, or examples.`,
-    `- No pleasantries. No "I would argue." No academic puff. No em dashes.`,
-    `- Do not summarize the topic. Speak.`,
-    `- Return JSON only. No preamble. No fences. Schema: { "text": "your turn" }`,
+    voiceRulesBlock(!!opts.stream),
+  ].join("\n");
+  return [{ type: "text", text, cache_control: { type: "ephemeral" } }];
+}
+
+// Third Chair: a student argues their own position against one figure.
+// One dossier block, same voice rules, plus the sparring-specific rule that
+// the opponent is a real student, not a strawman to be lectured at.
+function buildSparSystem(aObj, opts = {}) {
+  const text = [
+    `You are role-playing a figure from advertising history. A student is defending their own position against you, in a sparring exchange.`,
+    ``,
+    `FIGURE A is ${aObj.first} ${aObj.last}.`,
+    dossierBlock(aObj),
+    ``,
+    voiceRulesBlock(!!opts.stream),
+    `- Your opponent is a student defending their own position. Engage their actual words, not a strawman. Hold your documented standard. Do not be gentle. Do not be cruel. Never break voice to lecture about advertising history the student did not raise.`,
   ].join("\n");
   return [{ type: "text", text, cache_control: { type: "ephemeral" } }];
 }
@@ -1359,7 +1389,26 @@ export async function onRequestPost({ request, env }) {
           || request.headers.get("X-Forwarded-For")?.split(",")[0]?.trim()
           || "unknown";
 
-  // ---- 3. Enforce caps (only if KV is bound) ----
+  // ---- 3. Parse the body (needed before we can tell which action this is) ----
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ error: "Bad request body" }, 400);
+  }
+
+  // ---- check_anchors: pure string match, no Anthropic call, no KV increment ----
+  // Runs before the cap check on purpose: it costs nothing and is called once
+  // per streamed figure turn (streaming can't run the silent retry mid-stream,
+  // so the client checks after the fact and renders a small badge, or nothing).
+  if (body.action === "check_anchors") {
+    const list = ANCHORS[body.speaker] || [];
+    const lower = (body.text || "").toLowerCase();
+    const hits = list.filter((name) => lower.includes(name.toLowerCase()));
+    return json({ hits, total: list.length });
+  }
+
+  // ---- 4. Enforce caps (only if KV is bound) ----
   if (kv) {
     const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD, UTC
     const globalKey = `global:${today}`;
@@ -1394,40 +1443,153 @@ export async function onRequestPost({ request, env }) {
     ]);
   }
 
-  // ---- 4. Pass the request through to Anthropic ----
-  let body;
-  try {
-    body = await request.json();
-  } catch {
-    return json({ error: "Bad request body" }, 400);
-  }
+  // ---- score_student: Third Chair verdict. The figure's private `test` field ----
+  // never leaves the Worker; it is read from DOSSIERS and folded into the judging
+  // prompt server-side. This is a paid Sonnet call and already counted against
+  // caps above. get_standards (the old client-visible standard fetch) is retired;
+  // both scoring paths now build their judging prompt entirely server-side.
+  if (body.action === "score_student") {
+    const aObj = FIGURES[body.a];
+    if (!aObj) return json({ error: "Unknown figure" }, 400);
+    const d = DOSSIERS[body.a] || {};
+    const test = d.test || `An argument passes if it is consistent with the documented position and work of ${aObj.first} ${aObj.last}.`;
+    const position = d.position || aObj.bio;
 
-  // ---- get_standards: return each figure's own judging standard for per-figure scoring ----
-  // Called once by the client before evaluateExchange. Returns the test fields
-  // from the private dossiers. No Anthropic call; no KV increment.
-  if (body.action === "get_standards") {
-    const aId = body.a;
-    const bId = body.b;
-    const aD = DOSSIERS[aId];
-    const bD = DOSSIERS[bId];
-    const aObj = FIGURES[aId];
-    const bObj = FIGURES[bId];
-    return new Response(JSON.stringify({
-      standardA: aD && aD.test ? aD.test : aObj ? `An argument passes if it is consistent with the documented position and work of ${aObj.first} ${aObj.last}.` : null,
-      standardB: bD && bD.test ? bD.test : bObj ? `An argument passes if it is consistent with the documented position and work of ${bObj.first} ${bObj.last}.` : null,
-    }), {
-      status: 200,
+    const prompt = `You are scoring a student who just argued against ${aObj.first} ${aObj.last}. Apply ${aObj.last}'s own documented standard, quoted below, and nothing else. Do not reward eloquence. Reward whatever the standard rewards.
+
+${aObj.last.toUpperCase()}'S POSITION: ${position}
+
+${aObj.last.toUpperCase()}'S STANDARD FOR JUDGING AN ARGUMENT: ${test}
+
+TOPIC (the student's stated position): ${body.topic || ""}
+
+TRANSCRIPT (each line tagged [turn N]):
+${body.transcript || ""}
+
+Score against the standard, criterion by criterion. Quote the student's strongest line verbatim, and give its [turn N] number. Name the one question they never answered. survivalScore (0-100) measures how much of the standard the student's position still holds after three rounds — it reads as survival, not a grade.
+
+Return JSON only. No preamble. No fences. Schema:
+{
+  "verdict": "pass | fail | survived",
+  "criteria": [ { "name": "", "pass": true, "note": "one sentence" } ],
+  "unanswered": "the one question the student never answered",
+  "bestMove": { "quote": "student's strongest line, verbatim", "turnIndex": 2, "why": "one sentence" },
+  "survivalScore": 0
+}`;
+
+    const upstream = await callAnthropic(apiKey, "claude-sonnet-4-6", 1200, [{ role: "user", content: prompt }], null);
+    const text = await upstream.text();
+    return new Response(text, {
+      status: upstream.status,
       headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
     });
   }
 
-  // Build the debate system block server-side from the private DOSSIERS.
-  // The client sends { debatePair: { a, b } } only; the canon stays here.
+  // ---- score_debate: two-figure room-score/voice-fidelity/per-figure verdict. ----
+  // Moved server-side (from the client-built prompt in evaluateExchange) so the
+  // per-figure `test` standards never cross the network to the browser at all.
+  if (body.action === "score_debate") {
+    const aObj = FIGURES[body.a];
+    const bObj = FIGURES[body.b];
+    if (!aObj || !bObj) return json({ error: "Unknown figure" }, 400);
+    const aD = DOSSIERS[body.a];
+    const bD = DOSSIERS[body.b];
+    const standardA = aD && aD.test ? aD.test : null;
+    const standardB = bD && bD.test ? bD.test : null;
+
+    const perFigureBlock = (standardA || standardB) ? `
+SCORE THREE — PER-FIGURE SCORING. Judge each figure by their own standard, not a neutral rubric.
+
+${standardA ? `${aObj.last.toUpperCase()}'S OWN STANDARD:
+${standardA}
+
+Judge ${aObj.last}'s turns against this standard. Did their arguments survive it? Where did they fall short of their own criteria? One concrete verdict, two sentences maximum.` : ""}
+
+${standardB ? `${bObj.last.toUpperCase()}'S OWN STANDARD:
+${standardB}
+
+Judge ${bObj.last}'s turns against this standard. Did their arguments survive it? Where did they fall short of their own criteria? One concrete verdict, two sentences maximum.` : ""}
+
+Use these per-figure verdicts to sharpen the OPEN GROUND section. The open ground for each figure should name what their own standard would flag as unfinished, not what a neutral observer would note as missing.` : "";
+
+    const prompt = `You are a referee scoring a simulated debate between two figures from advertising history. The simulation is a reconstruction, not direct quotation. Your job is to score three things, in editorial register.
+
+FIGURE A: ${aObj.first} ${aObj.last} (${aObj.year})
+A's documented position and work: ${aObj.bio}
+
+FIGURE B: ${bObj.first} ${bObj.last} (${bObj.year})
+B's documented position and work: ${bObj.bio}
+
+TOPIC: ${body.topic || ""}
+
+TRANSCRIPT:
+${body.transcript || ""}
+
+SCORE ONE — ROOM SCORE (0-100). How well did this function as a real argument? Score five dimensions, each 0-20:
+- engagement: Did each turn respond to the prior turn, or monologue past it?
+- specificity: Did each speaker reference their own work concretely, or stay abstract?
+- concession: Did either speaker grant a real point, or did they hold their position untouched?
+- escalation: Did the argument get sharper across turns, or did it flatten?
+- productiveness: Did the exchange surface real intellectual ground, or rehash known positions?
+Sum the five for the Room Score.
+
+SCORE TWO — VOICE FIDELITY (0-100 per figure). How close did the reconstruction sit to the documented record for each figure? For each speaker, evaluate:
+- Did they reference something concrete from their actual work, methods, or examples?
+- Did the register match their period and idiom?
+- Were factual claims consistent with what they actually published?
+Score each figure 0-100 independently. Tier-three figures with limited firsthand record will score lower. That is correct and surfaces the disclaimer.
+${perFigureBlock}
+MOVE OF THE ROUND: Identify the single sharpest turn in the exchange. Give the turn number, the speaker (A or B), and one sentence on why it landed. Quote a phrase under 12 words from the turn itself.
+
+OPEN GROUND: For each figure, in one sentence, what does their own standard reveal as unfinished in this exchange? If per-figure standards were provided, use them. Be specific. Not generic.
+
+Return JSON only. No preamble. No fences. Schema:
+{
+  "roomScore": number,
+  "rubric": {
+    "engagement": number,
+    "specificity": number,
+    "concession": number,
+    "escalation": number,
+    "productiveness": number
+  },
+  "roomNote": "one short editorial sentence summarizing the exchange",
+  "voiceFidelityA": number,
+  "voiceFidelityB": number,
+  "voiceNoteA": "one short note on A's reconstruction",
+  "voiceNoteB": "one short note on B's reconstruction",
+  "perFigureA": "one sentence verdict on A by their own standard, or null if no standard available",
+  "perFigureB": "one sentence verdict on B by their own standard, or null if no standard available",
+  "moveOfRound": {
+    "turnIndex": number,
+    "speaker": "A or B (one letter)",
+    "quote": "phrase from that turn, under 12 words",
+    "reason": "one sentence on why it landed"
+  },
+  "openGroundA": "one sentence on what A's own standard would flag as unfinished",
+  "openGroundB": "one sentence on what B's own standard would flag as unfinished"
+}`;
+
+    const upstream = await callAnthropic(apiKey, "claude-sonnet-4-6", 1400, [{ role: "user", content: prompt }], null);
+    const text = await upstream.text();
+    return new Response(text, {
+      status: upstream.status,
+      headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+    });
+  }
+
+  // Build the debate/spar system block server-side from the private DOSSIERS.
+  // The client sends only ids ({ debatePair: { a, b } } or, for a spar,
+  // { debatePair: { a, human: true, speaker: a, topic } }); the canon stays here.
   let systemBlock = null;
-  if (body.debatePair && body.debatePair.a && body.debatePair.b) {
+  const isSpar = !!(body.debatePair && body.debatePair.human);
+  if (isSpar && body.debatePair.a) {
+    const aObj = FIGURES[body.debatePair.a];
+    if (aObj) systemBlock = buildSparSystem(aObj, { stream: !!body.stream });
+  } else if (body.debatePair && body.debatePair.a && body.debatePair.b) {
     const aObj = FIGURES[body.debatePair.a];
     const bObj = FIGURES[body.debatePair.b];
-    if (aObj && bObj) systemBlock = buildDebateSystem(aObj, bObj);
+    if (aObj && bObj) systemBlock = buildDebateSystem(aObj, bObj, { stream: !!body.stream });
   }
 
   // Light input safety: cap the prompt size so a hostile client cannot
@@ -1486,6 +1648,24 @@ export async function onRequestPost({ request, env }) {
         firstMessages = appendReminder(firstMessages, directive);
       }
     }
+  }
+
+  // ---- Streamed figure turns: pipe Anthropic's SSE body straight through. ----
+  // The silent anchor retry can't run mid-stream (there is no buffered JSON to
+  // re-check), so streamed turns skip it; the client calls check_anchors once
+  // the stream ends and renders a badge, or nothing. Applies to both debate
+  // turns and spar turns — same path, same reasoning, no fork.
+  if (body.stream) {
+    const streamRes = await callAnthropic(apiKey, model, maxTokens, firstMessages, systemBlock, true);
+    return new Response(streamRes.body, {
+      status: streamRes.status,
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+        "Access-Control-Allow-Origin": "*",
+      },
+    });
   }
 
   const upstream = await callAnthropic(apiKey, model, maxTokens, firstMessages, systemBlock);
@@ -1587,7 +1767,7 @@ function appendReminder(messages, reminder) {
   return out;
 }
 
-async function callAnthropic(apiKey, model, maxTokens, messages, systemBlock) {
+async function callAnthropic(apiKey, model, maxTokens, messages, systemBlock, stream = false) {
   return fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -1600,6 +1780,7 @@ async function callAnthropic(apiKey, model, maxTokens, messages, systemBlock) {
       max_tokens: maxTokens,
       messages,
       ...(systemBlock ? { system: systemBlock } : {}),
+      ...(stream ? { stream: true } : {}),
     }),
   });
 }
