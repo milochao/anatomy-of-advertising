@@ -729,8 +729,23 @@ ${instruction}`;
     const winnerPortrait = winnerFetch.dataURL;
     const loserPortrait = loserFetch.dataURL;
 
-    // FIX C: topic at 36px wrapped at 38 chars; quote wrapped at 28 chars per line, max 2 lines
-    const topicLines = wrapText(debateTopic, 38);
+    // Wraps then caps to maxLines, appending an ellipsis on the last visible
+    // line if that cut off real content — reads as an intentional edit
+    // rather than a broken sentence. Bounds worst-case height without
+    // guessing at word counts the model isn't strictly held to.
+    function wrapCapped(str, maxChars, maxLines) {
+      const lines = wrapText(str, maxChars);
+      if (lines.length <= maxLines) return lines;
+      const kept = lines.slice(0, maxLines);
+      kept[maxLines - 1] = kept[maxLines - 1].replace(/[.,;:—-]*$/, "") + "…";
+      return kept;
+    }
+
+    // The topic prompt asks for "under 20 words," but nothing server-side
+    // enforces that — an uncapped topic here pushed straight through the
+    // fixed-position winner name (y=776) and quote (y=858) below it, since
+    // neither of those move regardless of how tall the topic block grows.
+    const topicLines = wrapCapped(debateTopic, 38, 3);
     const topicFontSize = 36;
     const topicLineH = 46;
     const topicSVG = topicLines.map((l, i) =>
@@ -762,11 +777,18 @@ ${instruction}`;
     // Poster-card portrait blocks for card 2 — same portraits, same
     // monogram fallback, cropped to a big fight-card-style rectangle
     // instead of the full-bleed background treatment card 1 uses.
+    // Portraits are line art on their own white/cream background, not
+    // transparent cutouts — placed as a plain image, that background shows
+    // as a mismatched rectangle against the poster's gold. mix-blend-mode:
+    // multiply drops white to fully transparent against whatever's behind
+    // it (multiplying by white is a no-op) while keeping the dark linework,
+    // so the portrait reads as printed directly on the poster instead of
+    // pasted on as a photo card.
     const posterWinnerBlock = winnerPortrait
-      ? `<image href="${winnerPortrait}" x="46" y="560" width="480" height="360" clip-path="url(#pw)" filter="url(#pbw)" preserveAspectRatio="xMidYMin slice"/>`
+      ? `<image href="${winnerPortrait}" x="46" y="560" width="480" height="360" clip-path="url(#pw)" filter="url(#pbw)" style="mix-blend-mode:multiply" preserveAspectRatio="xMidYMin slice"/>`
       : monogramSVG(winnerObj, 46, 560, 480, 360, 0.9);
     const posterLoserBlock = loserPortrait
-      ? `<image href="${loserPortrait}" x="554" y="560" width="480" height="360" clip-path="url(#pl)" filter="url(#pbw)" opacity="0.88" preserveAspectRatio="xMidYMin slice"/>`
+      ? `<image href="${loserPortrait}" x="554" y="560" width="480" height="360" clip-path="url(#pl)" filter="url(#pbw)" style="mix-blend-mode:multiply" opacity="0.88" preserveAspectRatio="xMidYMin slice"/>`
       : monogramSVG(loserObj, 554, 560, 480, 360, 0.75);
 
 
@@ -803,18 +825,6 @@ ${instruction}`;
   <text x="56" y="1055" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="700" letter-spacing="2" opacity="0.3">AOA.MILOCHAO.COM</text>
   <text x="1024" y="1055" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="700" letter-spacing="2" text-anchor="end" opacity="0.3">DEBATE ${String(roundCount).padStart(3,"0")}</text>
 </svg>`;
-
-    // Wraps then caps to maxLines, appending an ellipsis on the last visible
-    // line if that cut off real content — reads as an intentional edit
-    // rather than a broken sentence. Bounds worst-case height without
-    // guessing at word counts the model isn't strictly held to.
-    function wrapCapped(str, maxChars, maxLines) {
-      const lines = wrapText(str, maxChars);
-      if (lines.length <= maxLines) return lines;
-      const kept = lines.slice(0, maxLines);
-      kept[maxLines - 1] = kept[maxLines - 1].replace(/[.,;:—-]*$/, "") + "…";
-      return kept;
-    }
 
     // Fight-card poster: bold color block, oversized stacked names, a VS
     // badge at the seam, big portrait blocks, one attributed pull-quote.
@@ -917,7 +927,7 @@ ${instruction}`;
       const quoteStartY = ruleY + RULE_TO_QUOTE;
 
       const portraitBlock = speakerPortrait
-        ? `<image href="${speakerPortrait}" x="340" y="${portraitY}" width="400" height="${PORTRAIT_H}" clip-path="url(#pp)" filter="url(#pbw)" preserveAspectRatio="xMidYMin slice"/>`
+        ? `<image href="${speakerPortrait}" x="340" y="${portraitY}" width="400" height="${PORTRAIT_H}" clip-path="url(#pp)" filter="url(#pbw)" style="mix-blend-mode:multiply" preserveAspectRatio="xMidYMin slice"/>`
         : monogramSVG(speakerObj, 340, portraitY, 400, PORTRAIT_H, 0.9);
 
       const quoteBlock = quoteLines.map((l, i) =>
@@ -1370,10 +1380,17 @@ ${driftNote} Do not change the subject. 2 to 4 sentences.`;
       try {
         const t = await callClaude(`Two figures from advertising history are about to debate. Pick the single most productive disagreement between them. State it as a short editorial phrase, lower-case unless proper noun, no closing punctuation.
 
+HARD LIMIT: under 20 words, one clause. Sports columnist register — write it the way a columnist teases a big matchup, not the way a debate club states a resolution.
+
+WRONG (parliamentary motion, banned register): "The debate motion resolved: when a new brand's initial customer base skews unexpectedly toward an older demographic, the skew is a distribution artifact that should be ignored in pursuit of mass penetration, not a brand identity signal requiring active intervention."
+RIGHT (one clause, sports-column voice): "is a brand's older-skewing early audience a warning sign, or just where the product happens to sit on the shelf"
+
+Never write "resolved that," "the core question is," or a semicolon-joined double clause. If your draft has more than one comma, cut it down to the single sharpest question.
+
 A: ${slotAObj.first} ${slotAObj.last}. ${slotAObj.bio}
 B: ${slotBObj.first} ${slotBObj.last}. ${slotBObj.bio}
 
-Return JSON only. Schema: { "topic": "the topic" }`, 200, "claude-haiku-4-5-20251001");
+Return JSON only. Schema: { "topic": "the topic, under 20 words, one clause" }`, 200, "claude-haiku-4-5-20251001");
         topicPhrase = t.topic || "their most productive disagreement";
       } catch (e) {
         topicPhrase = "their most productive disagreement";
