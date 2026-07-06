@@ -1402,8 +1402,15 @@ export async function onRequestPost({ request, env }) {
   // per streamed figure turn (streaming can't run the silent retry mid-stream,
   // so the client checks after the fact and renders a small badge, or nothing).
   if (body.action === "check_anchors") {
+    const rawText = typeof body.text === "string" ? body.text : "";
+    // This runs before the general 60K request-size cap below (it has to, to
+    // stay free), so it needs its own small bound: no real spoken turn is
+    // anywhere near this long.
+    if (rawText.length > 4000) {
+      return json({ hits: [], total: 0 });
+    }
     const list = ANCHORS[body.speaker] || [];
-    const lower = (body.text || "").toLowerCase();
+    const lower = rawText.toLowerCase();
     const hits = list.filter((name) => lower.includes(name.toLowerCase()));
     return json({ hits, total: list.length });
   }
@@ -1455,7 +1462,7 @@ export async function onRequestPost({ request, env }) {
     const test = d.test || `An argument passes if it is consistent with the documented position and work of ${aObj.first} ${aObj.last}.`;
     const position = d.position || aObj.bio;
 
-    const prompt = `You are scoring a student who just argued against ${aObj.first} ${aObj.last}. Apply ${aObj.last}'s own documented standard, quoted below, and nothing else. Do not reward eloquence. Reward whatever the standard rewards.
+    const prompt = `You are scoring a student who just argued against ${aObj.first} ${aObj.last}. Apply ${aObj.last}'s own documented standard, quoted below, and nothing else. Do not reward eloquence. Reward whatever the standard rewards. Never quote the standard's wording back verbatim anywhere in your response — paraphrase it in your own words in every field.
 
 ${aObj.last.toUpperCase()}'S POSITION: ${position}
 
@@ -1479,7 +1486,7 @@ Return JSON only. No preamble. No fences. Schema:
 
     const upstream = await callAnthropic(apiKey, "claude-sonnet-4-6", 1200, [{ role: "user", content: prompt }], null);
     const text = await upstream.text();
-    return new Response(text, {
+    return new Response(redactStandardEcho(text, upstream.ok, [test]), {
       status: upstream.status,
       headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
     });
@@ -1510,7 +1517,7 @@ ${standardB}
 
 Judge ${bObj.last}'s turns against this standard. Did their arguments survive it? Where did they fall short of their own criteria? One concrete verdict, two sentences maximum.` : ""}
 
-Use these per-figure verdicts to sharpen the OPEN GROUND section. The open ground for each figure should name what their own standard would flag as unfinished, not what a neutral observer would note as missing.` : "";
+Use these per-figure verdicts to sharpen the OPEN GROUND section. The open ground for each figure should name what their own standard would flag as unfinished, not what a neutral observer would note as missing. Never quote either standard's wording back verbatim anywhere in your response — paraphrase it in your own words in every field.` : "";
 
     const prompt = `You are a referee scoring a simulated debate between two figures from advertising history. The simulation is a reconstruction, not direct quotation. Your job is to score three things, in editorial register.
 
@@ -1572,7 +1579,7 @@ Return JSON only. No preamble. No fences. Schema:
 
     const upstream = await callAnthropic(apiKey, "claude-sonnet-4-6", 1400, [{ role: "user", content: prompt }], null);
     const text = await upstream.text();
-    return new Response(text, {
+    return new Response(redactStandardEcho(text, upstream.ok, [standardA, standardB]), {
       status: upstream.status,
       headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
     });
@@ -1753,6 +1760,32 @@ function countAnchors(parsed, list) {
     .join(" ")
     .toLowerCase();
   return list.filter((name) => contentText.includes(name.toLowerCase()));
+}
+
+// Defense in depth for the scoring actions: the judging prompt tells the model
+// not to quote the private standard verbatim, but nothing stops it from doing
+// so anyway inside a criteria note or open-ground field. If the exact standard
+// string does turn up in the model's reply, strip it before it reaches the
+// client — the standard itself must never appear in a network response,
+// regardless of model compliance.
+function redactStandardEcho(rawText, ok, standards) {
+  const clean = (standards || []).filter((s) => typeof s === "string" && s.length > 0);
+  if (!ok || clean.length === 0) return rawText;
+  try {
+    const parsed = JSON.parse(rawText);
+    if (!Array.isArray(parsed.content)) return rawText;
+    parsed.content = parsed.content.map((b) => {
+      if (!b || b.type !== "text" || typeof b.text !== "string") return b;
+      let t = b.text;
+      for (const s of clean) {
+        if (t.includes(s)) t = t.split(s).join("[standard omitted]");
+      }
+      return t === b.text ? b : { ...b, text: t };
+    });
+    return JSON.stringify(parsed);
+  } catch (e) {
+    return rawText; // unparseable: leave as-is rather than break the response
+  }
 }
 
 function appendReminder(messages, reminder) {

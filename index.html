@@ -447,6 +447,14 @@ ${instruction}`;
     }
   }
 
+  // If a figure turn fails mid-spar, sparTurns still ends on the student's
+  // last turn (the failed reply was never appended) — retry from there
+  // rather than leaving the user stuck with only the global "Leave" escape.
+  async function retrySparFigureTurn() {
+    setError(null);
+    await speakFigureTurn(sparTurns);
+  }
+
   async function beginSpar() {
     if (!slotAObj) return;
     const posText = position.trim();
@@ -959,25 +967,33 @@ Return JSON only. Schema: { "graf": "exactly 3 sentences under 55 words" }`
     const decoder = new TextDecoder();
     let buf = "";
     let text = "";
+
+    function processLine(line) {
+      if (!line.startsWith("data:")) return;
+      const dataStr = line.slice(5).trim();
+      if (!dataStr || dataStr === "[DONE]") return;
+      let evt;
+      try { evt = JSON.parse(dataStr); } catch (e) { return; }
+      if (evt.type === "content_block_delta" && evt.delta && evt.delta.type === "text_delta") {
+        text += evt.delta.text;
+        if (onDelta) onDelta(text);
+      } else if (evt.type === "error") {
+        throw new Error((evt.error && evt.error.message) || "Streaming error");
+      }
+    }
+
     while (true) {
       const { done, value } = await reader.read();
-      if (done) break;
+      if (done) {
+        // Flush whatever's left in buf: the stream can end without a
+        // trailing newline after the final SSE line.
+        if (buf) processLine(buf);
+        break;
+      }
       buf += decoder.decode(value, { stream: true });
       const lines = buf.split("\n");
       buf = lines.pop();
-      for (const line of lines) {
-        if (!line.startsWith("data:")) continue;
-        const dataStr = line.slice(5).trim();
-        if (!dataStr || dataStr === "[DONE]") continue;
-        let evt;
-        try { evt = JSON.parse(dataStr); } catch (e) { continue; }
-        if (evt.type === "content_block_delta" && evt.delta && evt.delta.type === "text_delta") {
-          text += evt.delta.text;
-          if (onDelta) onDelta(text);
-        } else if (evt.type === "error") {
-          throw new Error((evt.error && evt.error.message) || "Streaming error");
-        }
-      }
+      for (const line of lines) processLine(line);
     }
     return text.trim();
   }
@@ -1525,6 +1541,7 @@ You are now speaking as ${target.first} ${target.last}. The host has just put a 
             sparStudentInput={sparStudentInput}
             setSparStudentInput={setSparStudentInput}
             onSubmitSparTurn={submitSparTurn}
+            onRetryFigureTurn={retrySparFigureTurn}
             verdict={verdict}
             verdictLoading={verdictLoading}
             verdictError={verdictError}
@@ -2986,7 +3003,7 @@ function StudentTurn({ text }) {
 // ============================================================
 function SparScreen({
   slotAObj, position, sparTurns, loadingText, streamingTurn, error,
-  sparStudentInput, setSparStudentInput, onSubmitSparTurn,
+  sparStudentInput, setSparStudentInput, onSubmitSparTurn, onRetryFigureTurn,
   verdict, verdictLoading, verdictError, onNewSpar, onDownloadCard, cardGenerating, onLeave,
 }) {
   const tradA = slotAObj ? TRADITIONS[slotAObj.tradition] : null;
@@ -3007,6 +3024,10 @@ function SparScreen({
   const awaitingStudent = !done && !loadingText && !streamingTurn
     && figureCount < 3 && sparTurns.length > 0
     && sparTurns[sparTurns.length - 1].speaker === "A";
+  // A figure-turn generation failure leaves sparTurns ending on the student's
+  // last turn (the failed reply was never appended) — surface a retry here
+  // instead of leaving the exchange with no way forward but "Leave".
+  const stuckOnError = !done && !loadingText && !streamingTurn && !awaitingStudent && !!error;
   const studentTrimmed = sparStudentInput.trim();
 
   return (
@@ -3075,6 +3096,16 @@ function SparScreen({
             <div className="spar-char-count">{studentTrimmed.length} / 500</div>
             <button className="composition-begin spar-turn-submit" onClick={onSubmitSparTurn} disabled={!studentTrimmed}>
               Respond <span className="composition-arrow">→</span>
+            </button>
+          </div>
+        </footer>
+      )}
+
+      {stuckOnError && (
+        <footer className="exchange-controls">
+          <div className="exchange-controls-row">
+            <button className="ctrl ctrl-primary" onClick={onRetryFigureTurn}>
+              Try again
             </button>
           </div>
         </footer>
