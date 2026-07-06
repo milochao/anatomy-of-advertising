@@ -258,6 +258,7 @@ function AnatomyOfAdvertising() {
   const [starterContext, setStarterContext] = useState(null);
   const [exportFeedback, setExportFeedback] = useState(null);
   const [cardGenerating, setCardGenerating] = useState(false);
+  const [preparedCards, setPreparedCards] = useState(null);
   const [roomCard, setRoomCard] = useState(null);
   const [roomCardError, setRoomCardError] = useState(null);
   const [scoringInFlight, setScoringInFlight] = useState(false);
@@ -286,7 +287,7 @@ function AnatomyOfAdvertising() {
     setTopic(""); setExchange(null); setVisibleTurns(0);
     setLoadingText(null); setError(null); setFollowUpFor(null); setFollowUpText("");
     setStarterContext(null); setExportFeedback(null);
-    setRoomCard(null); setRoomCardError(null); setRoundCount(1); setPriorRoomScore(null);
+    setRoomCard(null); setRoomCardError(null); setPreparedCards(null); setRoundCount(1); setPriorRoomScore(null);
     setStreamingTurn(null);
     setPosition(""); setSparTurns([]); setSparStudentInput("");
     setVerdict(null); setVerdictLoading(false); setVerdictError(null);
@@ -333,7 +334,12 @@ function AnatomyOfAdvertising() {
     const t = thinkerById[id];
     if (!t || t.kind) return;
     if (mode === "spar") {
-      setSlotA(prev => (prev === id ? null : id));
+      // One tap, one figure, straight through. No second-pick step to get
+      // confused into — that ambiguity (tap a second figure out of duel-mode
+      // habit, silently swap with no feedback) is exactly what read as broken.
+      playClick();
+      setSlotA(id);
+      setPhase("composition");
       return;
     }
     if (id === slotA) { setSlotA(null); return; }
@@ -605,6 +611,45 @@ ${instruction}`;
     });
   }
 
+  // Renders an SVG string to a PNG Blob without triggering a download. Used
+  // by the two-card export: firing a.click() twice in the same async chain
+  // (one per card, separated by await) reliably gets the second download
+  // silently dropped by Safari's popup/download gate, which only trusts a
+  // download call made directly inside a synchronous user-gesture handler.
+  // Preparing both blobs first and downloading each from its own real click
+  // (see downloadBlob + the two buttons in the exchange footer) avoids that
+  // entirely instead of guessing at a timing fix.
+  async function svgToPngBlob(svgString) {
+    return new Promise((resolve) => {
+      const canvas = document.createElement("canvas");
+      canvas.width = 1080; canvas.height = 1080;
+      const ctx2d = canvas.getContext("2d");
+      ctx2d.fillStyle = "#ffffff";
+      ctx2d.fillRect(0, 0, 1080, 1080);
+      const svgBlob = new Blob([svgString], { type: "image/svg+xml" });
+      const url = URL.createObjectURL(svgBlob);
+      const img = new Image();
+      img.onload = () => {
+        ctx2d.drawImage(img, 0, 0, 1080, 1080);
+        canvas.toBlob(pngBlob => {
+          URL.revokeObjectURL(url);
+          resolve(pngBlob);
+        }, "image/png");
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
+      img.src = url;
+    });
+  }
+
+  function downloadBlob(blob, filename) {
+    if (!blob) return;
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+
   async function generateAndDownloadCards() {
     if (!exchange || !slotAObj || !slotBObj || !roomCard) return;
     setCardGenerating(true);
@@ -801,9 +846,14 @@ Return JSON only. Schema: { "graf": "exactly 3 sentences under 55 words" }`
 </svg>`;
 
     try {
-      await renderCard(card1SVG, `aoa-${winnerObj.id}-vs-${loserObj.id}-card1.png`);
-      await new Promise(r => setTimeout(r, 400));
-      await renderCard(card2SVG, `aoa-${winnerObj.id}-vs-${loserObj.id}-card2.png`);
+      const [card1Blob, card2Blob] = await Promise.all([
+        svgToPngBlob(card1SVG),
+        svgToPngBlob(card2SVG),
+      ]);
+      setPreparedCards({
+        card1: { blob: card1Blob, filename: `aoa-${winnerObj.id}-vs-${loserObj.id}-card1.png` },
+        card2: { blob: card2Blob, filename: `aoa-${winnerObj.id}-vs-${loserObj.id}-card2.png` },
+      });
     } catch(e) {
       console.error("Card export failed:", e);
     }
@@ -1180,7 +1230,7 @@ ${driftNote} Do not change the subject. 2 to 4 sentences.`;
   async function runExchange(topicArg) {
     if (!slotAObj || !slotBObj) return;
     setError(null); setExchange(null); setVisibleTurns(0);
-    setRoomCard(null); setRoomCardError(null); setPriorRoomScore(null); setRoundCount(1);
+    setRoomCard(null); setRoomCardError(null); setPreparedCards(null); setPriorRoomScore(null); setRoundCount(1);
     const usedTopic = (topicArg || "").trim();
 
     setLoadingText(`${slotAObj.last} and ${slotBObj.last} are taking their seats.`);
@@ -1270,7 +1320,7 @@ Return JSON only. Schema: { "topic": "the topic" }`, 200, "claude-haiku-4-5-2025
       },
     };
     setExchange(newInitial);
-    setRoomCard(null); setRoomCardError(null);
+    setRoomCard(null); setRoomCardError(null); setPreparedCards(null);
 
     const turns = [];
     const speakers = ["A", "B", "A", "B", "A", "B"];
@@ -1332,7 +1382,7 @@ ${constraint}`;
   }
 
   function newQuestionSamePair() {
-    setExchange(null); setVisibleTurns(0); setRoomCard(null); setRoomCardError(null);
+    setExchange(null); setVisibleTurns(0); setRoomCard(null); setRoomCardError(null); setPreparedCards(null);
     setRoundCount(1); setPriorRoomScore(null);
     setTopic(""); setStarterContext(null);
     setPhase("composition");
@@ -1377,7 +1427,7 @@ ${constraint}`;
         setVisibleTurns(working.length);
       }
       setLoadingText(null);
-      setRoomCard(null); setRoomCardError(null);
+      setRoomCard(null); setRoomCardError(null); setPreparedCards(null);
       scoreCurrentExchange(working, slotAObj, slotBObj, exchange.topic);
     } catch (e) {
       console.error(e);
@@ -1444,7 +1494,7 @@ Push back. Name the weakness in ${defenderName}'s last point. Quote a phrase fro
       setExchange({ ...exchange, turns: working });
       setVisibleTurns(working.length);
       setLoadingText(null);
-      setRoomCard(null); setRoomCardError(null);
+      setRoomCard(null); setRoomCardError(null); setPreparedCards(null);
       scoreCurrentExchange(working, slotAObj, slotBObj, exchange.topic);
     } catch (e) {
       console.error(e);
@@ -1510,7 +1560,7 @@ You are now speaking as ${target.first} ${target.last}. The host has just put a 
       setExchange({ ...exchange, turns: working });
       setVisibleTurns(working.length);
       setLoadingText(null);
-      setRoomCard(null); setRoomCardError(null);
+      setRoomCard(null); setRoomCardError(null); setPreparedCards(null);
       scoreCurrentExchange(working, slotAObj, slotBObj, exchange.topic);
     } catch (e) {
       console.error(e);
@@ -1606,6 +1656,8 @@ You are now speaking as ${target.first} ${target.last}. The host has just put a 
             onExport={exportToMarkdown}
             onDownloadCards={generateAndDownloadCards}
             cardGenerating={cardGenerating}
+            preparedCards={preparedCards}
+            onDownloadPreparedCard={(card) => downloadBlob(card.blob, card.filename)}
             exportFeedback={exportFeedback}
             roomCard={roomCard}
             roomCardError={roomCardError}
@@ -2079,6 +2131,10 @@ function ArrivalScreen({ warmStarts, thinkerById, onWarmStart, onOpenMap, onOpen
           </button>
         </div>
 
+        <p className="arrival-v2-mode-note">
+          Choose your two: watch and referee an argument between them. Take the third chair: state your own position and defend it yourself, alone, against one figure — then they score you by their own test.
+        </p>
+
         {figuresFaced > 0 && (
           <p className="arrival-v2-record">
             Faced {figuresFaced} figure{figuresFaced === 1 ? "" : "s"}. Survived {figuresSurvived}.
@@ -2098,7 +2154,10 @@ function ArrivalScreen({ warmStarts, thinkerById, onWarmStart, onOpenMap, onOpen
 // ============================================================
 function MapScreen({ mode, slotA, slotB, hoveredId, hoveredObj, onTap, onHover, onClear, onLeave, onBegin }) {
   const singleSlot = mode === "spar";
-  const ready = singleSlot ? !!slotA : !!(slotA && slotB);
+  // Spar mode has no two-step "pick, then Begin" — a single tap goes straight
+  // to composition (see tapStation). A visible Begin step here would just
+  // invite the exact second tap that made the old flow ambiguous.
+  const ready = !singleSlot && !!(slotA && slotB);
   const stations = THINKERS.map(t => ({
     ...t, x: COL_X[t.col], y: ROW_Y[t.tradition] + (t.offsetY || 0),
   }));
@@ -2108,7 +2167,7 @@ function MapScreen({ mode, slotA, slotB, hoveredId, hoveredObj, onTap, onHover, 
       <div className="map-intro">
         <p className="map-intro-text">
           {singleSlot
-            ? <><em>Take the third chair.</em> Pick the one figure whose standard you'll be held to.</>
+            ? <><em>Take the third chair.</em> You'll argue your own position against one figure, alone — tap the one whose standard you want to be held to. One tap starts it, no second pick.</>
             : <><em>The Anatomy of Advertising</em> maps an argument that's been running since Aristotle. Eight lenses, thirty-two voices. Pick two to set them against each other.</>}
         </p>
       </div>
@@ -2117,7 +2176,7 @@ function MapScreen({ mode, slotA, slotB, hoveredId, hoveredObj, onTap, onHover, 
         <div className="map-prelude-pill">
           <span className="live-dot"></span>
           {singleSlot
-            ? (!slotA ? <span>Pick one figure</span> : <span>Picked. Begin when ready.</span>)
+            ? <span>Tap one figure to begin</span>
             : (<>
                 {!slotA && !slotB && <span>Pick two figures</span>}
                 {slotA && !slotB && <span>One picked. Pick one more.</span>}
@@ -2425,8 +2484,28 @@ function SparCompositionScreen({ slotAObj, position, setPosition, onBegin, onSwa
 
   return (
     <section className="composition spar-composition">
-      <div className="composition-room spar-composition-room">
+      <div className="composition-room">
         <div className="comp-card-wrap comp-card-a">
+          <div className="comp-card comp-card-you" aria-label="You">
+            <div className="comp-card-photo comp-card-you-photo">
+              <span className="comp-you-mark">YOU</span>
+            </div>
+            <div className="comp-card-meta">
+              <div className="comp-card-trad">The challenger</div>
+              <div className="comp-card-name">
+                <span className="comp-last">You</span>
+              </div>
+              <div className="comp-card-year">Today</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="composition-vs">
+          <div className="vs-text">VS</div>
+          <div className="vs-bar" style={{ background: `linear-gradient(to right, #14110D, ${tradA.color})` }}></div>
+        </div>
+
+        <div className="comp-card-wrap comp-card-b">
           <button className="comp-card" onClick={onSwapA} style={{ ['--trad']: tradA.color }} aria-label="Change figure">
             <div className="comp-card-photo">
               {hasPortrait(slotAObj) && <img src={portraitURL(slotAObj.id)} alt="" />}
@@ -2441,13 +2520,13 @@ function SparCompositionScreen({ slotAObj, position, setPosition, onBegin, onSwa
             </div>
             <div className="comp-card-swap">change</div>
           </button>
-          <ConfidenceNote conf={getConfidence(slotAObj)} align="right" />
+          <ConfidenceNote conf={getConfidence(slotAObj)} align="left" />
         </div>
       </div>
 
       <div className="composition-actions is-ready spar-position-actions">
         <p className="composition-prompt">
-          State the position you will defend. A brand claim, a strategy, a belief about how advertising works.
+          You're arguing against {slotAObj.first} {slotAObj.last}. State the position you will defend — a brand claim, a strategy, a belief about how advertising works.
         </p>
         <textarea
           className="composition-input spar-position-input"
@@ -2474,7 +2553,7 @@ function ExchangeScreen({
   slotAObj, slotBObj, exchange, visibleTurns, loadingText, streamingTurn, error,
   followUpFor, followUpText, setFollowUpFor, setFollowUpText, onSubmitFollowUp,
   onContinue, onPushBack, onChangeRoom, onLeave, onExport, exportFeedback,
-  onDownloadCards, cardGenerating,
+  onDownloadCards, cardGenerating, preparedCards, onDownloadPreparedCard,
   roomCard, roomCardError, scoringInFlight, onPushHarder, onNewQuestion, roundCount, priorRoomScore,
 }) {
   const tradA = slotAObj ? TRADITIONS[slotAObj.tradition] : null;
@@ -2615,9 +2694,20 @@ function ExchangeScreen({
               <button className="ctrl ctrl-export" onClick={onExport}>
                 {exportFeedback ? <em>{exportFeedback}</em> : "Take it with you"}
               </button>
-              <button className="ctrl ctrl-cards" onClick={onDownloadCards} disabled={cardGenerating || !roomCard}>
-                {cardGenerating ? <em>Building cards…</em> : "Download cards"}
-              </button>
+              {preparedCards ? (
+                <>
+                  <button className="ctrl ctrl-cards" onClick={() => onDownloadPreparedCard(preparedCards.card1)}>
+                    Download card 1
+                  </button>
+                  <button className="ctrl ctrl-cards" onClick={() => onDownloadPreparedCard(preparedCards.card2)}>
+                    Download card 2
+                  </button>
+                </>
+              ) : (
+                <button className="ctrl ctrl-cards" onClick={onDownloadCards} disabled={cardGenerating || !roomCard}>
+                  {cardGenerating ? <em>Preparing cards…</em> : "Prepare cards"}
+                </button>
+              )}
               <button className="aoa-link aoa-link-quiet" onClick={onChangeRoom}>Change room</button>
             </div>
           )}
@@ -3578,6 +3668,15 @@ function GlobalStyle() {
         letter-spacing: 0.04em;
         color: var(--mid);
       }
+      .arrival-v2-mode-note {
+        max-width: 520px;
+        margin: 0 auto 20px;
+        text-align: center;
+        font-family: 'Geist', sans-serif;
+        font-size: 13px;
+        line-height: 1.5;
+        color: var(--ink-quiet);
+      }
       .rp-pick {
         background: none; border: none; padding: 6px 0;
         cursor: pointer;
@@ -4117,8 +4216,8 @@ function GlobalStyle() {
       .composition {
         min-height: calc(100vh - 70px);
         display: flex; flex-direction: column; align-items: center;
-        justify-content: center;
-        padding: 60px 36px;
+        justify-content: flex-start;
+        padding: 90px 36px 60px;
         background: var(--bg-warm);
       }
       .composition-empty {
@@ -4217,6 +4316,23 @@ function GlobalStyle() {
         transition: opacity 0.2s;
       }
       .comp-card:hover .comp-card-swap { opacity: 1; }
+
+      .comp-card-you {
+        cursor: default;
+      }
+      .comp-card-a .comp-card-you:hover { transform: rotate(-1.5deg); box-shadow: 4px 4px 0 var(--ink); }
+      .comp-card-you-photo {
+        border-bottom: 4px solid var(--ink);
+        background: #14110D;
+      }
+      .comp-you-mark {
+        font-family: 'Geist Mono', monospace;
+        font-weight: 700;
+        font-size: 15px;
+        letter-spacing: 0.2em;
+        color: #ffffff;
+        opacity: 0.85;
+      }
 
       .composition-vs {
         display: flex; flex-direction: column; align-items: center; gap: 14px;
@@ -4582,9 +4698,6 @@ function GlobalStyle() {
       /* ============================================================
          THIRD CHAIR — spar composition, exchange, and verdict
          ============================================================ */
-      .spar-composition-room {
-        display: flex; justify-content: center; margin-bottom: 40px;
-      }
       .spar-position-actions { max-width: 620px; }
       .spar-position-input {
         border-radius: 18px;
