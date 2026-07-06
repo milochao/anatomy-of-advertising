@@ -258,6 +258,7 @@ function AnatomyOfAdvertising() {
   const [starterContext, setStarterContext] = useState(null);
   const [exportFeedback, setExportFeedback] = useState(null);
   const [cardGenerating, setCardGenerating] = useState(false);
+  const [preparedCards, setPreparedCards] = useState(null);
   const [roomCard, setRoomCard] = useState(null);
   const [roomCardError, setRoomCardError] = useState(null);
   const [scoringInFlight, setScoringInFlight] = useState(false);
@@ -286,7 +287,7 @@ function AnatomyOfAdvertising() {
     setTopic(""); setExchange(null); setVisibleTurns(0);
     setLoadingText(null); setError(null); setFollowUpFor(null); setFollowUpText("");
     setStarterContext(null); setExportFeedback(null);
-    setRoomCard(null); setRoomCardError(null); setRoundCount(1); setPriorRoomScore(null);
+    setRoomCard(null); setRoomCardError(null); setPreparedCards(null); setRoundCount(1); setPriorRoomScore(null);
     setStreamingTurn(null);
     setPosition(""); setSparTurns([]); setSparStudentInput("");
     setVerdict(null); setVerdictLoading(false); setVerdictError(null);
@@ -610,6 +611,45 @@ ${instruction}`;
     });
   }
 
+  // Renders an SVG string to a PNG Blob without triggering a download. Used
+  // by the two-card export: firing a.click() twice in the same async chain
+  // (one per card, separated by await) reliably gets the second download
+  // silently dropped by Safari's popup/download gate, which only trusts a
+  // download call made directly inside a synchronous user-gesture handler.
+  // Preparing both blobs first and downloading each from its own real click
+  // (see downloadBlob + the two buttons in the exchange footer) avoids that
+  // entirely instead of guessing at a timing fix.
+  async function svgToPngBlob(svgString) {
+    return new Promise((resolve) => {
+      const canvas = document.createElement("canvas");
+      canvas.width = 1080; canvas.height = 1080;
+      const ctx2d = canvas.getContext("2d");
+      ctx2d.fillStyle = "#ffffff";
+      ctx2d.fillRect(0, 0, 1080, 1080);
+      const svgBlob = new Blob([svgString], { type: "image/svg+xml" });
+      const url = URL.createObjectURL(svgBlob);
+      const img = new Image();
+      img.onload = () => {
+        ctx2d.drawImage(img, 0, 0, 1080, 1080);
+        canvas.toBlob(pngBlob => {
+          URL.revokeObjectURL(url);
+          resolve(pngBlob);
+        }, "image/png");
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
+      img.src = url;
+    });
+  }
+
+  function downloadBlob(blob, filename) {
+    if (!blob) return;
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+
   async function generateAndDownloadCards() {
     if (!exchange || !slotAObj || !slotBObj || !roomCard) return;
     setCardGenerating(true);
@@ -806,9 +846,14 @@ Return JSON only. Schema: { "graf": "exactly 3 sentences under 55 words" }`
 </svg>`;
 
     try {
-      await renderCard(card1SVG, `aoa-${winnerObj.id}-vs-${loserObj.id}-card1.png`);
-      await new Promise(r => setTimeout(r, 400));
-      await renderCard(card2SVG, `aoa-${winnerObj.id}-vs-${loserObj.id}-card2.png`);
+      const [card1Blob, card2Blob] = await Promise.all([
+        svgToPngBlob(card1SVG),
+        svgToPngBlob(card2SVG),
+      ]);
+      setPreparedCards({
+        card1: { blob: card1Blob, filename: `aoa-${winnerObj.id}-vs-${loserObj.id}-card1.png` },
+        card2: { blob: card2Blob, filename: `aoa-${winnerObj.id}-vs-${loserObj.id}-card2.png` },
+      });
     } catch(e) {
       console.error("Card export failed:", e);
     }
@@ -1185,7 +1230,7 @@ ${driftNote} Do not change the subject. 2 to 4 sentences.`;
   async function runExchange(topicArg) {
     if (!slotAObj || !slotBObj) return;
     setError(null); setExchange(null); setVisibleTurns(0);
-    setRoomCard(null); setRoomCardError(null); setPriorRoomScore(null); setRoundCount(1);
+    setRoomCard(null); setRoomCardError(null); setPreparedCards(null); setPriorRoomScore(null); setRoundCount(1);
     const usedTopic = (topicArg || "").trim();
 
     setLoadingText(`${slotAObj.last} and ${slotBObj.last} are taking their seats.`);
@@ -1275,7 +1320,7 @@ Return JSON only. Schema: { "topic": "the topic" }`, 200, "claude-haiku-4-5-2025
       },
     };
     setExchange(newInitial);
-    setRoomCard(null); setRoomCardError(null);
+    setRoomCard(null); setRoomCardError(null); setPreparedCards(null);
 
     const turns = [];
     const speakers = ["A", "B", "A", "B", "A", "B"];
@@ -1337,7 +1382,7 @@ ${constraint}`;
   }
 
   function newQuestionSamePair() {
-    setExchange(null); setVisibleTurns(0); setRoomCard(null); setRoomCardError(null);
+    setExchange(null); setVisibleTurns(0); setRoomCard(null); setRoomCardError(null); setPreparedCards(null);
     setRoundCount(1); setPriorRoomScore(null);
     setTopic(""); setStarterContext(null);
     setPhase("composition");
@@ -1382,7 +1427,7 @@ ${constraint}`;
         setVisibleTurns(working.length);
       }
       setLoadingText(null);
-      setRoomCard(null); setRoomCardError(null);
+      setRoomCard(null); setRoomCardError(null); setPreparedCards(null);
       scoreCurrentExchange(working, slotAObj, slotBObj, exchange.topic);
     } catch (e) {
       console.error(e);
@@ -1449,7 +1494,7 @@ Push back. Name the weakness in ${defenderName}'s last point. Quote a phrase fro
       setExchange({ ...exchange, turns: working });
       setVisibleTurns(working.length);
       setLoadingText(null);
-      setRoomCard(null); setRoomCardError(null);
+      setRoomCard(null); setRoomCardError(null); setPreparedCards(null);
       scoreCurrentExchange(working, slotAObj, slotBObj, exchange.topic);
     } catch (e) {
       console.error(e);
@@ -1515,7 +1560,7 @@ You are now speaking as ${target.first} ${target.last}. The host has just put a 
       setExchange({ ...exchange, turns: working });
       setVisibleTurns(working.length);
       setLoadingText(null);
-      setRoomCard(null); setRoomCardError(null);
+      setRoomCard(null); setRoomCardError(null); setPreparedCards(null);
       scoreCurrentExchange(working, slotAObj, slotBObj, exchange.topic);
     } catch (e) {
       console.error(e);
@@ -1611,6 +1656,8 @@ You are now speaking as ${target.first} ${target.last}. The host has just put a 
             onExport={exportToMarkdown}
             onDownloadCards={generateAndDownloadCards}
             cardGenerating={cardGenerating}
+            preparedCards={preparedCards}
+            onDownloadPreparedCard={(card) => downloadBlob(card.blob, card.filename)}
             exportFeedback={exportFeedback}
             roomCard={roomCard}
             roomCardError={roomCardError}
@@ -2506,7 +2553,7 @@ function ExchangeScreen({
   slotAObj, slotBObj, exchange, visibleTurns, loadingText, streamingTurn, error,
   followUpFor, followUpText, setFollowUpFor, setFollowUpText, onSubmitFollowUp,
   onContinue, onPushBack, onChangeRoom, onLeave, onExport, exportFeedback,
-  onDownloadCards, cardGenerating,
+  onDownloadCards, cardGenerating, preparedCards, onDownloadPreparedCard,
   roomCard, roomCardError, scoringInFlight, onPushHarder, onNewQuestion, roundCount, priorRoomScore,
 }) {
   const tradA = slotAObj ? TRADITIONS[slotAObj.tradition] : null;
@@ -2647,9 +2694,20 @@ function ExchangeScreen({
               <button className="ctrl ctrl-export" onClick={onExport}>
                 {exportFeedback ? <em>{exportFeedback}</em> : "Take it with you"}
               </button>
-              <button className="ctrl ctrl-cards" onClick={onDownloadCards} disabled={cardGenerating || !roomCard}>
-                {cardGenerating ? <em>Building cards…</em> : "Download cards"}
-              </button>
+              {preparedCards ? (
+                <>
+                  <button className="ctrl ctrl-cards" onClick={() => onDownloadPreparedCard(preparedCards.card1)}>
+                    Download card 1
+                  </button>
+                  <button className="ctrl ctrl-cards" onClick={() => onDownloadPreparedCard(preparedCards.card2)}>
+                    Download card 2
+                  </button>
+                </>
+              ) : (
+                <button className="ctrl ctrl-cards" onClick={onDownloadCards} disabled={cardGenerating || !roomCard}>
+                  {cardGenerating ? <em>Preparing cards…</em> : "Prepare cards"}
+                </button>
+              )}
               <button className="aoa-link aoa-link-quiet" onClick={onChangeRoom}>Change room</button>
             </div>
           )}
@@ -4158,8 +4216,8 @@ function GlobalStyle() {
       .composition {
         min-height: calc(100vh - 70px);
         display: flex; flex-direction: column; align-items: center;
-        justify-content: center;
-        padding: 60px 36px;
+        justify-content: flex-start;
+        padding: 90px 36px 60px;
         background: var(--bg-warm);
       }
       .composition-empty {
