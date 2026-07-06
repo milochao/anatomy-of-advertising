@@ -622,6 +622,48 @@ ${instruction}`;
     return minSize;
   }
 
+  // A card's quote is the whole reason it's shareable on its own — if it
+  // gets cut mid-thought, the card stops standing on its own no matter how
+  // good the visual design is. Card 1's quote used to wrap at a guessed
+  // 28-chars-per-line and then silently keep only the first 2 lines with no
+  // ellipsis — not a truncation marker, just gone, mid-sentence, with no
+  // sign anything was cut. A 12-word quote routinely needs more than 2
+  // lines at a fixed 44px, so this wasn't a rare edge case, it was the
+  // common one. Real fix: measure actual text width (like fitFontSize does
+  // for names) and shrink the font size until the whole quote fits in the
+  // space available, so a compliant quote never gets cut. Only if it still
+  // doesn't fit at the smallest allowed size does this fall back to a
+  // truncation — and even then it always appends a visible ellipsis, never
+  // drops words silently.
+  function fitQuoteBlock(quote, { maxWidth, maxHeight, maxFontSize, minFontSize, lineHeightRatio = 1.25, fontWeight = "900", fontFamily = "'Arial Black', Arial, sans-serif" }) {
+    const ctx = document.createElement("canvas").getContext("2d");
+    function wrapAtSize(size) {
+      ctx.font = `${fontWeight} ${size}px ${fontFamily}`;
+      const words = (quote || "").split(" ");
+      const lines = [];
+      let cur = "";
+      words.forEach(w => {
+        const test = cur ? `${cur} ${w}` : w;
+        if (cur && ctx.measureText(test).width > maxWidth) { lines.push(cur); cur = w; }
+        else { cur = test; }
+      });
+      if (cur) lines.push(cur);
+      return lines;
+    }
+    for (let size = maxFontSize; size >= minFontSize; size -= 2) {
+      const lines = wrapAtSize(size);
+      const lineH = Math.round(size * lineHeightRatio);
+      if (lines.length * lineH <= maxHeight) return { fontSize: size, lines, lineH };
+    }
+    const lineH = Math.round(minFontSize * lineHeightRatio);
+    const maxLines = Math.max(1, Math.floor(maxHeight / lineH));
+    const lines = wrapAtSize(minFontSize);
+    if (lines.length <= maxLines) return { fontSize: minFontSize, lines, lineH };
+    const kept = lines.slice(0, maxLines);
+    kept[maxLines - 1] = kept[maxLines - 1].replace(/[.,;:—-]*$/, "") + "…";
+    return { fontSize: minFontSize, lines: kept, lineH };
+  }
+
   function starPoints(cx, cy, r) {
     const points = [];
     for (let i = 0; i < 10; i++) {
@@ -754,18 +796,15 @@ ${instruction}`;
     const topicBlockH = topicLines.length * topicLineH;
     const ruleY = 128 + topicBlockH;
 
-    const quoteWords = `"${quote}"`.split(" ");
-    const quoteLines = [];
-    let qCur = "";
-    quoteWords.forEach(w => {
-      if ((qCur + " " + w).trim().length > 28) { quoteLines.push(qCur.trim()); qCur = w; }
-      else { qCur = (qCur + " " + w).trim(); }
+    const QUOTE_START_Y = 858;
+    const QUOTE_MAX_HEIGHT = 1018 - 40 - QUOTE_START_Y; // stop clear of the footer bar (y=1018), leaving room for the attribution line below
+    const { fontSize: quoteFontSize, lines: quoteLines, lineH: quoteLineH } = fitQuoteBlock(`"${quote}"`, {
+      maxWidth: 968, maxHeight: QUOTE_MAX_HEIGHT, maxFontSize: 44, minFontSize: 26,
     });
-    if (qCur) quoteLines.push(qCur.trim());
-    const quoteSVG = quoteLines.slice(0, 2).map((l, i) =>
-      `<text x="56" y="${858 + i * 56}" fill="#ffffff" font-family="Arial Black, Arial, sans-serif" font-size="44" font-weight="900" letter-spacing="-1.5">${l}</text>`
+    const quoteSVG = quoteLines.map((l, i) =>
+      `<text x="56" y="${QUOTE_START_Y + i * quoteLineH}" fill="#ffffff" font-family="Arial Black, Arial, sans-serif" font-size="${quoteFontSize}" font-weight="900" letter-spacing="-1.5">${l}</text>`
     ).join("\n");
-    const attributionY = 858 + Math.min(quoteLines.length, 2) * 56;
+    const attributionY = QUOTE_START_Y + quoteLines.length * quoteLineH + 26;
 
     const winnerImageBlock = winnerPortrait
       ? `<image href="${winnerPortrait}" x="-60" y="${ruleY}" width="860" height="${1080 - ruleY}" clip-path="url(#gc)" filter="url(#bw)" preserveAspectRatio="xMidYMin slice" opacity="0.9"/>`
@@ -841,10 +880,14 @@ ${instruction}`;
     ).join("\n");
     const posterTopicEndY = 252 + (posterTopicLines.length - 1) * 42;
 
-    const posterQuoteLines = wrapCapped(`"${quote}"`, 46, 2);
     const posterQuoteY = 978;
+    const POSTER_QUOTE_MAX_HEIGHT = 1010 - 12 - posterQuoteY; // footer bar starts at y=1010
+    const { fontSize: posterQuoteFontSize, lines: posterQuoteLines, lineH: posterQuoteLineH } = fitQuoteBlock(`"${quote}"`, {
+      maxWidth: 940, maxHeight: POSTER_QUOTE_MAX_HEIGHT, maxFontSize: 19, minFontSize: 14,
+      lineHeightRatio: 1.35, fontWeight: "700", fontFamily: "Arial, Helvetica, sans-serif",
+    });
     const posterQuoteBlock = posterQuoteLines.map((l, i) =>
-      `<text x="540" y="${posterQuoteY + i * 26}" fill="#1a1408" font-family="Arial, Helvetica, sans-serif" font-size="19" font-style="italic" font-weight="700" text-anchor="middle">${l}</text>`
+      `<text x="540" y="${posterQuoteY + i * posterQuoteLineH}" fill="#1a1408" font-family="Arial, Helvetica, sans-serif" font-size="${posterQuoteFontSize}" font-style="italic" font-weight="700" text-anchor="middle">${l}</text>`
     ).join("\n");
 
     // Real measured width (fitFontSize), not a guessed average character
@@ -905,12 +948,15 @@ ${instruction}`;
     // the whole exchange, so this reuses the portraits/colors already
     // fetched above rather than fetching anything new.
     function buildPunchCardSVG({ speakerObj, speakerTrad, speakerColor, speakerPortrait, quote, label, turnIndex, totalTurns }) {
-      // Cap is a safety net, not the expected case — the model doesn't
-      // reliably hold to the word limit asked for server-side, so this
-      // needs enough headroom that a slightly-over-length quote doesn't
-      // land right at the boundary and get chopped mid-word.
-      const quoteLines = wrapCapped(`"${quote}"`, 24, 5);
-      const quoteLineH = 58;
+      // Measured width, not a guessed chars-per-line, and font shrinks
+      // before anything gets cut — same fix as card 1's quote block. The
+      // 5-line/26px floor below is a last-resort safety net for a quote
+      // that blows well past the word limit asked for server-side, not
+      // the expected path; the ellipsis only appears if content is
+      // genuinely dropped, never silently.
+      const { fontSize: quoteFontSize, lines: quoteLines, lineH: quoteLineH } = fitQuoteBlock(`"${quote}"`, {
+        maxWidth: 880, maxHeight: 58 * 5, maxFontSize: 46, minFontSize: 26,
+      });
 
       const HEADER_BOTTOM = 116;
       const FOOTER_TOP = 1010;
@@ -938,7 +984,7 @@ ${instruction}`;
         : monogramSVG(speakerObj, 340, portraitY, 400, PORTRAIT_H, 0.9);
 
       const quoteBlock = quoteLines.map((l, i) =>
-        `<text x="540" y="${quoteStartY + i * quoteLineH}" fill="#1a1408" font-family="Arial Black, Arial, sans-serif" font-size="46" font-weight="900" text-anchor="middle" letter-spacing="-1">${l}</text>`
+        `<text x="540" y="${quoteStartY + i * quoteLineH}" fill="#1a1408" font-family="Arial Black, Arial, sans-serif" font-size="${quoteFontSize}" font-weight="900" text-anchor="middle" letter-spacing="-1">${l}</text>`
       ).join("\n");
 
       return `<svg viewBox="0 0 1080 1080" xmlns="http://www.w3.org/2000/svg" width="1080" height="1080">
