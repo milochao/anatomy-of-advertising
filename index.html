@@ -772,6 +772,20 @@ Return JSON only. Schema: { "graf": "exactly 3 sentences under 55 words" }`
       : monogramSVG(loserObj, 904, 92, 120, 120, 0.45);
 
     const scoreMeterW = Math.max(0, Math.min(100, roomCard.roomScore)) / 100 * 220;
+    // A bare "64/100" means nothing to a reader who's never seen the rubric
+    // — it's legible to whoever built the scoring, not whoever's scrolling
+    // past the card. Translate it into the same plain-English register the
+    // spar verdict already uses (SURVIVED / DID NOT SURVIVE) instead of
+    // making a raw number more visually prominent without making it mean
+    // anything.
+    function roomScoreLabel(score) {
+      if (score >= 85) return "RAZOR-SHARP EXCHANGE";
+      if (score >= 70) return "SHARP EXCHANGE";
+      if (score >= 50) return "REAL GROUND, LEFT OPEN";
+      if (score >= 30) return "MOSTLY CIRCLING";
+      return "TALKED PAST EACH OTHER";
+    }
+    const roomScoreTier = roomScoreLabel(roomCard.roomScore);
 
     const card1SVG = `<svg viewBox="0 0 1080 1080" xmlns="http://www.w3.org/2000/svg" width="1080" height="1080">
   <defs>
@@ -830,17 +844,28 @@ Return JSON only. Schema: { "graf": "exactly 3 sentences under 55 words" }`
     const ogLoserLines = wrapCapped(openGroundLoser || "", 58, 4);
     const ogWinnerLines = wrapCapped(openGroundWinner || "", 58, 4);
 
+    // The small-caps name label sits at baseline +18 (10px type). The first
+    // quote line needs real clearance from it, not just the same increment
+    // used between subsequent lines — 18px text stacked 6px under a label
+    // reads as garbled overlapping type, not a caption.
+    const OG_LABEL_Y = 18;
+    const OG_FIRST_LINE_Y = 44;
+    const OG_LINE_H = 24;
+    const OG_TAIL = 20;
+    const ogLoserBarH = OG_FIRST_LINE_Y + (ogLoserLines.length - 1) * OG_LINE_H + 10;
+    const ogWinnerBarH = OG_FIRST_LINE_Y + (ogWinnerLines.length - 1) * OG_LINE_H + 10;
+
     const ogLoserY = afterGraf + 44;
     const ogLoserBlock = ogLoserLines.map((l, i) =>
-      `<text x="74" y="${ogLoserY + 24 + i * 24}" fill="#111111" font-family="Arial, Helvetica, sans-serif" font-size="18" letter-spacing="-0.2">${l}</text>`
+      `<text x="74" y="${ogLoserY + OG_FIRST_LINE_Y + i * OG_LINE_H}" fill="#111111" font-family="Arial, Helvetica, sans-serif" font-size="18" letter-spacing="-0.2">${l}</text>`
     ).join("\n");
-    const afterOgLoser = ogLoserY + 24 + ogLoserLines.length * 24 + 22;
+    const afterOgLoser = ogLoserY + OG_FIRST_LINE_Y + (ogLoserLines.length - 1) * OG_LINE_H + OG_TAIL;
 
     const ogWinnerY = afterOgLoser + 20;
     const ogWinnerBlock = ogWinnerLines.map((l, i) =>
-      `<text x="74" y="${ogWinnerY + 24 + i * 24}" fill="#111111" font-family="Arial, Helvetica, sans-serif" font-size="18" letter-spacing="-0.2">${l}</text>`
+      `<text x="74" y="${ogWinnerY + OG_FIRST_LINE_Y + i * OG_LINE_H}" fill="#111111" font-family="Arial, Helvetica, sans-serif" font-size="18" letter-spacing="-0.2">${l}</text>`
     ).join("\n");
-    const afterOgWinner = ogWinnerY + 24 + ogWinnerLines.length * 24 + 26;
+    const afterOgWinner = ogWinnerY + OG_FIRST_LINE_Y + (ogWinnerLines.length - 1) * OG_LINE_H + OG_TAIL;
 
     const card2SVG = `<svg viewBox="0 0 1080 1080" xmlns="http://www.w3.org/2000/svg" width="1080" height="1080">
   <defs>
@@ -868,11 +893,11 @@ Return JSON only. Schema: { "graf": "exactly 3 sentences under 55 words" }`
   ${grafBlock}
   <rect x="56" y="${afterGraf}" width="968" height="1" fill="#dddddd"/>
   <text x="56" y="${afterGraf + 38}" fill="#111111" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="700" letter-spacing="4">WHAT NEITHER SETTLED</text>
-  <rect x="56" y="${ogLoserY}" width="3" height="${26 + ogLoserLines.length * 26}" fill="#111111"/>
-  <text x="74" y="${ogLoserY + 18}" fill="#aaaaaa" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="700" letter-spacing="3">${loserObj.last.toUpperCase()}</text>
+  <rect x="56" y="${ogLoserY}" width="3" height="${ogLoserBarH}" fill="#111111"/>
+  <text x="74" y="${ogLoserY + OG_LABEL_Y}" fill="#aaaaaa" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="700" letter-spacing="3">${loserObj.last.toUpperCase()}</text>
   ${ogLoserBlock}
-  <rect x="56" y="${ogWinnerY}" width="3" height="${26 + ogWinnerLines.length * 26}" fill="#111111"/>
-  <text x="74" y="${ogWinnerY + 18}" fill="#aaaaaa" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="700" letter-spacing="3">${winnerObj.last.toUpperCase()}</text>
+  <rect x="56" y="${ogWinnerY}" width="3" height="${ogWinnerBarH}" fill="#111111"/>
+  <text x="74" y="${ogWinnerY + OG_LABEL_Y}" fill="#aaaaaa" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="700" letter-spacing="3">${winnerObj.last.toUpperCase()}</text>
   ${ogWinnerBlock}
   <rect x="56" y="${afterOgWinner}" width="968" height="1" fill="#dddddd"/>
   <text x="56" y="${afterOgWinner + 26}" fill="#aaaaaa" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="700" letter-spacing="3">FINAL SCORE</text>
@@ -880,6 +905,7 @@ Return JSON only. Schema: { "graf": "exactly 3 sentences under 55 words" }`
   <text x="${56 + String(roomCard.roomScore).length * 23 + 4}" y="${afterOgWinner + 64}" fill="#aaaaaa" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="700">/100</text>
   <rect x="200" y="${afterOgWinner + 50}" width="220" height="8" rx="4" fill="#eeeeee"/>
   <rect x="200" y="${afterOgWinner + 50}" width="${scoreMeterW}" height="8" rx="4" fill="${winnerColor}"/>
+  <text x="56" y="${afterOgWinner + 92}" fill="${winnerColor}" font-family="Arial Black, Arial, sans-serif" font-size="14" font-weight="900" letter-spacing="1">${roomScoreTier}</text>
   <rect x="0" y="1010" width="1080" height="70" fill="#111111"/>
   <text x="56" y="1051" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="700" letter-spacing="2" opacity="0.35">AOA.MILOCHAO.COM</text>
   <text x="1024" y="1051" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="700" letter-spacing="2" text-anchor="end" opacity="0.35">DEBATE ${String(roundCount).padStart(3,"0")}</text>
