@@ -1551,10 +1551,12 @@ MOVE OF THE ROUND: Identify the single sharpest turn in the exchange. Give the t
 Quote a phrase under 12 words from the turn itself — a hard limit, not a target; count the words before you answer. The quote must stand on its own as a complete thought, in plain language, with no debate-internal shorthand — a reader who sees ONLY this quote, cold, with no turn before it and no other card, must immediately understand it.
 WRONG (dangling pronoun, needs an antecedent not in the quote): "that is a distribution and physical availability story, not a semiotics story"
 WRONG (leans on an invented metaphor from earlier in the debate that this quote never explains): "no amount of penetration strategy fixes a mirror that is showing people the wrong reflection"
+WRONG (same failure, a different word — "that signal" names nothing inside the quote): "moving into a new aisle doesn't erase that signal"
 RIGHT (complete, plain, no invented terms): "a Gen X skew is a shelf-placement story, not a semiotics story"
-Never coin or lean on a metaphor this quote itself doesn't explain (a "mirror," a "signal," anything named earlier in the debate) — say the plain thing it stands for instead. If the sharpest words in the turn require an antecedent, either extend the quote to include what it refers to, or pick a different, self-sufficient line from the same turn — never ship the dangling or jargon-dependent version, and never let the word count run past the limit trying to fit one in.
+Never coin or lean on a placeholder word this quote itself doesn't explain — "it," "that," "this," "a mirror," "a signal," anything named earlier in the debate — say the plain thing it stands for instead. If the sharpest words in the turn require an antecedent, either extend the quote to include what it refers to, or pick a different, self-sufficient line from the same turn — never ship the dangling or jargon-dependent version, and never let the word count run past the limit trying to fit one in.
+The schema below makes you do this in two steps, not one: pick the candidate first, then explicitly judge it against the rule above, then only write the final quote once that judgment is made. Do not skip the judgment step or default it to false without checking — that check is the entire point.
 
-HIGHLIGHTS: The card export shows one card per turn, not just the single sharpest one — a reader should see the whole arc, not just its peak. For EVERY turn in the transcript, in order, pull the single most quotable phrase from that specific turn (under 14 words) and a short label naming the move it made (e.g. "THE OPENING CLAIM", "THE COUNTER", "THE CONCESSION", "THE PIVOT", "THE CLOSING BLOW" — vary these to fit what actually happened in that turn, don't reuse a fixed sequence). Same self-containment rule as MOVE OF THE ROUND above applies to every one of these quotes, not just the featured one.
+HIGHLIGHTS: The card export shows one card per turn, not just the single sharpest one — a reader should see the whole arc, not just its peak. For EVERY turn in the transcript, in order, pull the single most quotable phrase from that specific turn (under 14 words) and a short label naming the move it made (e.g. "THE OPENING CLAIM", "THE COUNTER", "THE CONCESSION", "THE PIVOT", "THE CLOSING BLOW" — vary these to fit what actually happened in that turn, don't reuse a fixed sequence). Same self-containment rule as MOVE OF THE ROUND above applies to every one of these quotes, not just the featured one, including the two-step candidate-then-judge process.
 
 OPEN GROUND: For each figure, in one sentence, what does their own standard reveal as unfinished in this exchange? If per-figure standards were provided, use them. Be specific. Not generic.
 
@@ -1578,14 +1580,18 @@ Return JSON only. No preamble. No fences. Schema:
   "moveOfRound": {
     "turnIndex": number,
     "speaker": "A or B (one letter)",
-    "quote": "phrase from that turn, under 12 words",
+    "candidateQuote": "your first-pick phrase from that turn, under 12 words",
+    "candidateNeedsAntecedent": "true or false — does candidateQuote use a pronoun or placeholder word (it/that/this/a mirror/a signal/etc) whose meaning is not restated inside candidateQuote itself? Check this honestly, do not default to false",
+    "quote": "if candidateNeedsAntecedent is false, repeat candidateQuote verbatim here. If true, this must be a DIFFERENT rewritten line from the same turn that names the plain thing directly instead of the placeholder word — never repeat a candidate that needed an antecedent",
     "reason": "one sentence on why it landed"
   },
   "highlights": [
     {
       "turnIndex": number,
       "speaker": "A or B (one letter)",
-      "quote": "the most quotable phrase from this turn, under 14 words",
+      "candidateQuote": "your first-pick phrase from this turn, under 14 words",
+      "candidateNeedsAntecedent": "true or false — same check as moveOfRound.candidateNeedsAntecedent, applied to this candidateQuote",
+      "quote": "same rule as moveOfRound.quote: candidateQuote verbatim if candidateNeedsAntecedent is false, otherwise a different rewritten self-contained line from the same turn",
       "label": "short caption naming the move, e.g. THE OPENING CLAIM"
     }
   ],
@@ -1593,7 +1599,7 @@ Return JSON only. No preamble. No fences. Schema:
   "openGroundB": "one sentence on what B's own standard would flag as unfinished"
 }`;
 
-    const upstream = await callAnthropic(apiKey, "claude-sonnet-4-6", 1800, [{ role: "user", content: prompt }], null);
+    const upstream = await callAnthropic(apiKey, "claude-sonnet-4-6", 2400, [{ role: "user", content: prompt }], null);
     const text = await upstream.text();
     return new Response(redactStandardEcho(text, upstream.ok, [standardA, standardB]), {
       status: upstream.status,
