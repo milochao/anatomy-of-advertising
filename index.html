@@ -697,24 +697,50 @@ ${instruction}`;
       const url = URL.createObjectURL(svgBlob);
       const img = new Image();
       img.onload = () => {
-        ctx2d.drawImage(img, 0, 0, 1080, 1080);
-        canvas.toBlob(pngBlob => {
+        // drawImage/toBlob can throw synchronously (e.g. a SecurityError if
+        // the canvas got tainted) — that used to be an uncaught exception
+        // inside this callback, which resolves nothing and just hangs the
+        // caller's Promise.all forever with no visible error.
+        try {
+          ctx2d.drawImage(img, 0, 0, 1080, 1080);
+          canvas.toBlob(pngBlob => {
+            URL.revokeObjectURL(url);
+            resolve(pngBlob);
+          }, "image/png");
+        } catch (e) {
+          console.error("svgToPngBlob render failed:", e);
           URL.revokeObjectURL(url);
-          resolve(pngBlob);
-        }, "image/png");
+          resolve(null);
+        }
       };
       img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
       img.src = url;
     });
   }
 
+  // Was silent on failure — if a card's blob came back null (the image
+  // failed to render to canvas) or a.click() threw for any reason, nothing
+  // happened and nothing told the user why. Both are now surfaced instead
+  // of swallowed. What this can't detect: a browser-level "downloads
+  // blocked for this site" permission gate never fires a JS event at all —
+  // there is no callback for that failure mode, so a blocked-by-permission
+  // download will still look silent from here. That's a browser setting,
+  // not something client-side code can observe or fix.
   function downloadBlob(blob, filename) {
-    if (!blob) return;
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = filename;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    if (!blob) {
+      alert(`"${filename}" couldn't be generated. Try "Prepare cards" again.`);
+      return;
+    }
+    try {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = filename;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    } catch (e) {
+      console.error("Download failed:", e);
+      alert(`"${filename}" failed to download: ${e.message}`);
+    }
   }
 
   async function generateAndDownloadCards() {
