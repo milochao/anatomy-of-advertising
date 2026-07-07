@@ -717,6 +717,100 @@ ${instruction}`;
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   }
 
+  // A minimal ZIP writer (STORE method — no compression) so "download all"
+  // is one file, one click, instead of a wall of individual card buttons.
+  // No external library: the app has no build step and everything else is
+  // vendored via a plain <script> tag, so a small dependency-free encoder
+  // avoids adding a CDN dependency just for this. STORE (uncompressed) is
+  // fine here because every entry is already a PNG — already-compressed
+  // bytes don't shrink further under DEFLATE, so skipping compression costs
+  // nothing and keeps the implementation simple.
+  const ZIP_CRC_TABLE = (() => {
+    const t = new Uint32Array(256);
+    for (let n = 0; n < 256; n++) {
+      let c = n;
+      for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+      t[n] = c >>> 0;
+    }
+    return t;
+  })();
+  function crc32(bytes) {
+    let crc = 0xFFFFFFFF;
+    for (let i = 0; i < bytes.length; i++) crc = ZIP_CRC_TABLE[(crc ^ bytes[i]) & 0xFF] ^ (crc >>> 8);
+    return (crc ^ 0xFFFFFFFF) >>> 0;
+  }
+  function zipU16(n) { return [n & 0xFF, (n >>> 8) & 0xFF]; }
+  function zipU32(n) { return [n & 0xFF, (n >>> 8) & 0xFF, (n >>> 16) & 0xFF, (n >>> 24) & 0xFF]; }
+
+  async function buildZip(files) {
+    const encoder = new TextEncoder();
+    const now = new Date();
+    // ZIP timestamps are DOS date/time (2-second resolution) — there's no
+    // finer-grained option in the format, "now" is all a download bundle needs.
+    const dosTime = ((now.getHours() << 11) | (now.getMinutes() << 5) | (now.getSeconds() >> 1)) & 0xFFFF;
+    const dosDate = (((now.getFullYear() - 1980) << 9) | ((now.getMonth() + 1) << 5) | now.getDate()) & 0xFFFF;
+
+    const entries = [];
+    for (const f of files) {
+      const nameBytes = encoder.encode(f.name);
+      const dataBuf = new Uint8Array(await f.blob.arrayBuffer());
+      entries.push({ nameBytes, dataBuf, crc: crc32(dataBuf), size: dataBuf.length });
+    }
+
+    const localParts = [];
+    const offsets = [];
+    let offset = 0;
+    for (const e of entries) {
+      const header = new Uint8Array([
+        ...zipU32(0x04034b50), ...zipU16(20), ...zipU16(0), ...zipU16(0),
+        ...zipU16(dosTime), ...zipU16(dosDate),
+        ...zipU32(e.crc), ...zipU32(e.size), ...zipU32(e.size),
+        ...zipU16(e.nameBytes.length), ...zipU16(0),
+      ]);
+      offsets.push(offset);
+      localParts.push(header, e.nameBytes, e.dataBuf);
+      offset += header.length + e.nameBytes.length + e.dataBuf.length;
+    }
+
+    const centralParts = [];
+    let centralSize = 0;
+    entries.forEach((e, i) => {
+      const header = new Uint8Array([
+        ...zipU32(0x02014b50), ...zipU16(20), ...zipU16(20), ...zipU16(0), ...zipU16(0),
+        ...zipU16(dosTime), ...zipU16(dosDate),
+        ...zipU32(e.crc), ...zipU32(e.size), ...zipU32(e.size),
+        ...zipU16(e.nameBytes.length), ...zipU16(0), ...zipU16(0),
+        ...zipU16(0), ...zipU16(0), ...zipU32(0),
+        ...zipU32(offsets[i]),
+      ]);
+      centralParts.push(header, e.nameBytes);
+      centralSize += header.length + e.nameBytes.length;
+    });
+
+    const eocd = new Uint8Array([
+      ...zipU32(0x06054b50), ...zipU16(0), ...zipU16(0),
+      ...zipU16(entries.length), ...zipU16(entries.length),
+      ...zipU32(centralSize), ...zipU32(offset),
+      ...zipU16(0),
+    ]);
+
+    const allParts = [...localParts, ...centralParts, eocd];
+    const totalLen = allParts.reduce((sum, p) => sum + p.length, 0);
+    const out = new Uint8Array(totalLen);
+    let pos = 0;
+    for (const p of allParts) { out.set(p, pos); pos += p.length; }
+    return new Blob([out], { type: "application/zip" });
+  }
+
+  async function downloadAllPreparedCards() {
+    if (!preparedCards || !preparedCards.length) return;
+    const zipBlob = await buildZip(preparedCards.map(c => ({ name: c.filename, blob: c.blob })));
+    // Derive "aoa-sharp-vs-gossage-cards.zip" from the first card's own
+    // filename rather than threading winner/loser ids down separately.
+    const zipName = preparedCards[0].filename.replace(/-(card\d+|punch\d+)\.png$/, "") + "-cards.zip";
+    downloadBlob(zipBlob, zipName);
+  }
+
   async function generateAndDownloadCards() {
     if (!exchange || !slotAObj || !slotBObj || !roomCard) return;
     setCardGenerating(true);
@@ -1855,7 +1949,7 @@ You are now speaking as ${target.first} ${target.last}. The host has just put a 
             onDownloadCards={generateAndDownloadCards}
             cardGenerating={cardGenerating}
             preparedCards={preparedCards}
-            onDownloadPreparedCard={(card) => downloadBlob(card.blob, card.filename)}
+            onDownloadAllCards={downloadAllPreparedCards}
             exportFeedback={exportFeedback}
             roomCard={roomCard}
             roomCardError={roomCardError}
@@ -2644,7 +2738,7 @@ function ExchangeScreen({
   slotAObj, slotBObj, exchange, visibleTurns, loadingText, streamingTurn, error,
   followUpFor, followUpText, setFollowUpFor, setFollowUpText, onSubmitFollowUp,
   onContinue, onPushBack, onChangeRoom, onLeave, onExport, exportFeedback,
-  onDownloadCards, cardGenerating, preparedCards, onDownloadPreparedCard,
+  onDownloadCards, cardGenerating, preparedCards, onDownloadAllCards,
   roomCard, roomCardError, scoringInFlight, onPushHarder, onNewQuestion, roundCount, priorRoomScore,
 }) {
   const tradA = slotAObj ? TRADITIONS[slotAObj.tradition] : null;
@@ -2786,11 +2880,9 @@ function ExchangeScreen({
                 {exportFeedback ? <em>{exportFeedback}</em> : "Take it with you"}
               </button>
               {preparedCards ? (
-                preparedCards.map((card, i) => (
-                  <button key={i} className="ctrl ctrl-cards" onClick={() => onDownloadPreparedCard(card)}>
-                    Download {card.label.toLowerCase()}
-                  </button>
-                ))
+                <button className="ctrl ctrl-cards" onClick={onDownloadAllCards}>
+                  Download all cards (.zip)
+                </button>
               ) : (
                 <button className="ctrl ctrl-cards" onClick={onDownloadCards} disabled={cardGenerating || !roomCard}>
                   {cardGenerating ? <em>Preparing cards…</em> : "Prepare cards"}
