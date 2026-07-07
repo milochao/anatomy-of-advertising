@@ -762,14 +762,20 @@ ${instruction}`;
     }
 
     // The topic prompt asks for "under 20 words," but nothing server-side
-    // enforces that — an uncapped topic here pushed straight through the
-    // fixed-position winner name (y=776) and quote (y=858) below it, since
-    // neither of those move regardless of how tall the topic block grows.
-    const topicLines = wrapCapped(debateTopic, 38, 3);
-    const topicFontSize = 36;
-    const topicLineH = 46;
+    // enforces that, and a reader who never saw the debate has ONLY this
+    // topic plus the quote below to understand what's being argued — cutting
+    // it with an ellipsis (the old wrapCapped(debateTopic, 38, 3)) meant the
+    // single piece of context a cold reader gets was routinely incomplete.
+    // Same fix as the quote blocks: shrink the font before ever truncating.
+    // The only fixed downstream element is the winner name at y=776, so the
+    // budget below just needs to clear that with margin.
+    const TOPIC_START_Y = 96;
+    const { fontSize: topicFontSize, lines: topicLines, lineH: topicLineH } = fitQuoteBlock(debateTopic, {
+      maxWidth: 968, maxHeight: 776 - TOPIC_START_Y - 60, maxFontSize: 36, minFontSize: 22,
+      lineHeightRatio: 1.28,
+    });
     const topicSVG = topicLines.map((l, i) =>
-      `<text x="56" y="${96 + i * topicLineH}" fill="#ffffff" font-family="Arial Black, Arial, sans-serif" font-size="${topicFontSize}" font-weight="900" letter-spacing="-1">${l}</text>`
+      `<text x="56" y="${TOPIC_START_Y + i * topicLineH}" fill="#ffffff" font-family="Arial Black, Arial, sans-serif" font-size="${topicFontSize}" font-weight="900" letter-spacing="-1">${l}</text>`
     ).join("\n");
     const topicBlockH = topicLines.length * topicLineH;
     const ruleY = 128 + topicBlockH;
@@ -852,11 +858,17 @@ ${instruction}`;
     // promotion — "THE VERDICT IS IN" / past-tense subhead / a WINNER
     // ribbon, since the reference poster it started from was advertising
     // an upcoming fight and never actually declared an outcome.
-    const posterTopicLines = wrapCapped(debateTopic, 34, 2);
+    // Same shrink-before-truncate fix as card 1's topic — the fixed portrait
+    // blocks at y=560 are the only real downstream constraint, so the budget
+    // just needs enough margin to clear those.
+    const POSTER_TOPIC_START_Y = 252;
+    const { fontSize: posterTopicFontSize, lines: posterTopicLines, lineH: posterTopicLineH } = fitQuoteBlock(debateTopic.toUpperCase(), {
+      maxWidth: 900, maxHeight: 130, maxFontSize: 32, minFontSize: 22, lineHeightRatio: 1.31,
+    });
     const posterTopicSVG = posterTopicLines.map((l, i) =>
-      `<text x="540" y="${252 + i * 42}" fill="#1a1408" font-family="Arial Black, Arial, sans-serif" font-size="32" font-weight="900" text-anchor="middle" letter-spacing="-0.5">${l.toUpperCase()}</text>`
+      `<text x="540" y="${POSTER_TOPIC_START_Y + i * posterTopicLineH}" fill="#1a1408" font-family="Arial Black, Arial, sans-serif" font-size="${posterTopicFontSize}" font-weight="900" text-anchor="middle" letter-spacing="-0.5">${l}</text>`
     ).join("\n");
-    const posterTopicEndY = 252 + (posterTopicLines.length - 1) * 42;
+    const posterTopicEndY = POSTER_TOPIC_START_Y + (posterTopicLines.length - 1) * posterTopicLineH;
 
     const posterQuoteY = 978;
     const POSTER_QUOTE_MAX_HEIGHT = 1010 - 12 - posterQuoteY; // footer bar starts at y=1010
