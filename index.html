@@ -238,6 +238,7 @@ function AnatomyOfAdvertising() {
   const [exportFeedback, setExportFeedback] = useState(null);
   const [cardGenerating, setCardGenerating] = useState(false);
   const [preparedCards, setPreparedCards] = useState(null);
+  const [preparedZip, setPreparedZip] = useState(null);
   const [roomCard, setRoomCard] = useState(null);
   const [roomCardError, setRoomCardError] = useState(null);
   const [scoringInFlight, setScoringInFlight] = useState(false);
@@ -265,7 +266,7 @@ function AnatomyOfAdvertising() {
     setTopic(""); setExchange(null); setVisibleTurns(0);
     setLoadingText(null); setError(null); setFollowUpFor(null); setFollowUpText("");
     setStarterContext(null); setExportFeedback(null);
-    setRoomCard(null); setRoomCardError(null); setPreparedCards(null); setRoundCount(1); setPriorRoomScore(null);
+    setRoomCard(null); setRoomCardError(null); setPreparedCards(null); setPreparedZip(null); setRoundCount(1); setPriorRoomScore(null);
     setStreamingTurn(null);
     setPosition(""); setSparTurns([]); setSparStudentInput("");
     setVerdict(null); setVerdictLoading(false); setVerdictError(null);
@@ -802,13 +803,13 @@ ${instruction}`;
     return new Blob([out], { type: "application/zip" });
   }
 
-  async function downloadAllPreparedCards() {
-    if (!preparedCards || !preparedCards.length) return;
-    const zipBlob = await buildZip(preparedCards.map(c => ({ name: c.filename, blob: c.blob })));
-    // Derive "aoa-sharp-vs-gossage-cards.zip" from the first card's own
-    // filename rather than threading winner/loser ids down separately.
-    const zipName = preparedCards[0].filename.replace(/-(card\d+|punch\d+)\.png$/, "") + "-cards.zip";
-    downloadBlob(zipBlob, zipName);
+  // Synchronous on purpose: preparedZip is built ahead of time (see
+  // generateAndDownloadCards), so this click handler does nothing but call
+  // downloadBlob directly — no awaited work between the click and the
+  // download, which is what Safari's download gate actually requires.
+  function downloadAllPreparedCards() {
+    if (!preparedZip) return;
+    downloadBlob(preparedZip.blob, preparedZip.filename);
   }
 
   async function generateAndDownloadCards() {
@@ -1133,7 +1134,7 @@ ${instruction}`;
         svgToPngBlob(card2SVG),
         ...punchSVGs.map(svg => svgToPngBlob(svg)),
       ]);
-      setPreparedCards([
+      const cards = [
         { blob: card1Blob, filename: `aoa-${winnerObj.id}-vs-${loserObj.id}-card1.png`, label: "Card 1" },
         { blob: card2Blob, filename: `aoa-${winnerObj.id}-vs-${loserObj.id}-card2.png`, label: "Card 2" },
         ...punchBlobs.map((blob, i) => ({
@@ -1141,7 +1142,18 @@ ${instruction}`;
           filename: `aoa-${winnerObj.id}-vs-${loserObj.id}-punch${i + 1}.png`,
           label: `Punch ${i + 1}`,
         })),
-      ]);
+      ];
+      setPreparedCards(cards);
+      // Build the zip now, during the same "Preparing cards…" wait, not on
+      // the download click. A click handler that awaits async work before
+      // calling a.click() can get silently blocked by Safari's popup/download
+      // gate (same class of bug as the old per-card download flow) — the
+      // fix there was to do all the async work ahead of time so the actual
+      // download button click is a synchronous downloadBlob call with
+      // nothing awaited in between, and this needs the same treatment.
+      const zipBlob = await buildZip(cards.map(c => ({ name: c.filename, blob: c.blob })));
+      const zipName = `aoa-${winnerObj.id}-vs-${loserObj.id}-cards.zip`;
+      setPreparedZip({ blob: zipBlob, filename: zipName });
     } catch(e) {
       console.error("Card export failed:", e);
     }
@@ -1518,7 +1530,7 @@ ${driftNote} Do not change the subject. 2 to 4 sentences.`;
   async function runExchange(topicArg) {
     if (!slotAObj || !slotBObj) return;
     setError(null); setExchange(null); setVisibleTurns(0);
-    setRoomCard(null); setRoomCardError(null); setPreparedCards(null); setPriorRoomScore(null); setRoundCount(1);
+    setRoomCard(null); setRoomCardError(null); setPreparedCards(null); setPreparedZip(null); setPriorRoomScore(null); setRoundCount(1);
     const usedTopic = (topicArg || "").trim();
 
     setLoadingText(`${slotAObj.last} and ${slotBObj.last} are taking their seats.`);
@@ -1615,7 +1627,7 @@ Return JSON only. Schema: { "topic": "the topic, under 20 words, one clause" }`,
       },
     };
     setExchange(newInitial);
-    setRoomCard(null); setRoomCardError(null); setPreparedCards(null);
+    setRoomCard(null); setRoomCardError(null); setPreparedCards(null); setPreparedZip(null);
 
     const turns = [];
     const speakers = ["A", "B", "A", "B", "A", "B"];
@@ -1677,7 +1689,7 @@ ${constraint}`;
   }
 
   function newQuestionSamePair() {
-    setExchange(null); setVisibleTurns(0); setRoomCard(null); setRoomCardError(null); setPreparedCards(null);
+    setExchange(null); setVisibleTurns(0); setRoomCard(null); setRoomCardError(null); setPreparedCards(null); setPreparedZip(null);
     setRoundCount(1); setPriorRoomScore(null);
     setTopic(""); setStarterContext(null);
     setPhase("composition");
@@ -1722,7 +1734,7 @@ ${constraint}`;
         setVisibleTurns(working.length);
       }
       setLoadingText(null);
-      setRoomCard(null); setRoomCardError(null); setPreparedCards(null);
+      setRoomCard(null); setRoomCardError(null); setPreparedCards(null); setPreparedZip(null);
       scoreCurrentExchange(working, slotAObj, slotBObj, exchange.topic);
     } catch (e) {
       console.error(e);
@@ -1789,7 +1801,7 @@ Push back. Name the weakness in ${defenderName}'s last point. Quote a phrase fro
       setExchange({ ...exchange, turns: working });
       setVisibleTurns(working.length);
       setLoadingText(null);
-      setRoomCard(null); setRoomCardError(null); setPreparedCards(null);
+      setRoomCard(null); setRoomCardError(null); setPreparedCards(null); setPreparedZip(null);
       scoreCurrentExchange(working, slotAObj, slotBObj, exchange.topic);
     } catch (e) {
       console.error(e);
@@ -1855,7 +1867,7 @@ You are now speaking as ${target.first} ${target.last}. The host has just put a 
       setExchange({ ...exchange, turns: working });
       setVisibleTurns(working.length);
       setLoadingText(null);
-      setRoomCard(null); setRoomCardError(null); setPreparedCards(null);
+      setRoomCard(null); setRoomCardError(null); setPreparedCards(null); setPreparedZip(null);
       scoreCurrentExchange(working, slotAObj, slotBObj, exchange.topic);
     } catch (e) {
       console.error(e);
@@ -1948,7 +1960,7 @@ You are now speaking as ${target.first} ${target.last}. The host has just put a 
             onExport={exportToMarkdown}
             onDownloadCards={generateAndDownloadCards}
             cardGenerating={cardGenerating}
-            preparedCards={preparedCards}
+            preparedZip={preparedZip}
             onDownloadAllCards={downloadAllPreparedCards}
             exportFeedback={exportFeedback}
             roomCard={roomCard}
@@ -2738,7 +2750,7 @@ function ExchangeScreen({
   slotAObj, slotBObj, exchange, visibleTurns, loadingText, streamingTurn, error,
   followUpFor, followUpText, setFollowUpFor, setFollowUpText, onSubmitFollowUp,
   onContinue, onPushBack, onChangeRoom, onLeave, onExport, exportFeedback,
-  onDownloadCards, cardGenerating, preparedCards, onDownloadAllCards,
+  onDownloadCards, cardGenerating, preparedZip, onDownloadAllCards,
   roomCard, roomCardError, scoringInFlight, onPushHarder, onNewQuestion, roundCount, priorRoomScore,
 }) {
   const tradA = slotAObj ? TRADITIONS[slotAObj.tradition] : null;
@@ -2879,7 +2891,7 @@ function ExchangeScreen({
               <button className="ctrl ctrl-export" onClick={onExport}>
                 {exportFeedback ? <em>{exportFeedback}</em> : "Take it with you"}
               </button>
-              {preparedCards ? (
+              {preparedZip ? (
                 <button className="ctrl ctrl-cards" onClick={onDownloadAllCards}>
                   Download all cards (.zip)
                 </button>
