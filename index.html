@@ -48,20 +48,6 @@ const PORTRAIT_AVAILABLE = new Set([
 ]);
 function hasPortrait(t) { return t && !t.kind && PORTRAIT_AVAILABLE.has(t.id); }
 
-const ROW_Y = {
-  ethics:140, rational:230, emotional:320, unconscious:410,
-  empirical:500, branding:590, consumer:680, behavioral:770,
-};
-const COL_X = {
-  bce:100, y1850:220, y1900:340, y1906:420, y1915:500, y1923:580,
-  y1928:660, y1929:740, y1930s:820, y1948:900, y1949:980, y1950:1060,
-  y1950s:1140, y1957:1220, y1959:1300, y1964:1380, y1965:1460, y1968:1540,
-  y1972:1620, y1984:1700, y1990s:1780, y1994:1860, y2001:1940, y2008:2020,
-  y2010:2100, y2011:2180, y2013:2260, y2019:2340, y2020:2420,
-};
-const VIEWBOX_W = 2740;
-const VIEWBOX_H = 940;
-
 // ============================================================
 // CONFIDENCE TIERS
 // ============================================================
@@ -167,12 +153,6 @@ const THINKERS = [
     bio:"Alchemy, 2019. Argued perceived value is real value. Logic is one tool. Magic is another. The vice-chairman case for irrationality as advantage." },
 ];
 
-const BRIDGES = [
-  { fromTrad:"rational", toTrad:"emotional", col:"y1948" },
-  { fromTrad:"ethics",   toTrad:"unconscious", col:"y1929" },
-  { fromTrad:"emotional",toTrad:"empirical", col:"y2013" },
-];
-
 // ---------------------------------------------------------------------------
 // DOSSIERS: the deep, sourced argue-from material per figure, keyed by id.
 // Only the speaking content lives here. Build-time provenance (verification
@@ -252,7 +232,6 @@ function AnatomyOfAdvertising() {
   const [visibleTurns, setVisibleTurns] = useState(0);
   const [loadingText, setLoadingText] = useState(null);
   const [error, setError] = useState(null);
-  const [hoveredId, setHoveredId] = useState(null);
   const [followUpFor, setFollowUpFor] = useState(null);
   const [followUpText, setFollowUpText] = useState("");
   const [starterContext, setStarterContext] = useState(null);
@@ -280,7 +259,6 @@ function AnatomyOfAdvertising() {
   }, []);
   const slotAObj = slotA ? thinkerById[slotA] : null;
   const slotBObj = slotB ? thinkerById[slotB] : null;
-  const hoveredObj = hoveredId ? thinkerById[hoveredId] : null;
 
   function goArrival() {
     setPhase("arrival"); setMode("duel"); setSlotA(null); setSlotB(null);
@@ -1788,10 +1766,7 @@ You are now speaking as ${target.first} ${target.last}. The host has just put a 
           <MapScreen
             mode={mode}
             slotA={slotA} slotB={slotB}
-            hoveredId={hoveredId}
-            hoveredObj={hoveredObj}
             onTap={tapStation}
-            onHover={setHoveredId}
             onClear={() => { setSlotA(null); setSlotB(null); }}
             onLeave={goArrival}
             onBegin={() => setPhase("composition")}
@@ -2353,15 +2328,12 @@ function ArrivalScreen({ warmStarts, thinkerById, onWarmStart, onOpenMap, onOpen
 // ============================================================
 // MAP — subway map preserved, palette and chrome moved to playful
 // ============================================================
-function MapScreen({ mode, slotA, slotB, hoveredId, hoveredObj, onTap, onHover, onClear, onLeave, onBegin }) {
+function MapScreen({ mode, slotA, slotB, onTap, onClear, onLeave, onBegin }) {
   const singleSlot = mode === "spar";
   // Spar mode has no two-step "pick, then Begin" — a single tap goes straight
   // to composition (see tapStation). A visible Begin step here would just
   // invite the exact second tap that made the old flow ambiguous.
   const ready = !singleSlot && !!(slotA && slotB);
-  const stations = THINKERS.map(t => ({
-    ...t, x: COL_X[t.col], y: ROW_Y[t.tradition] + (t.offsetY || 0),
-  }));
 
   return (
     <section className="map-screen">
@@ -2398,176 +2370,72 @@ function MapScreen({ mode, slotA, slotB, hoveredId, hoveredObj, onTap, onHover, 
         </div>
       )}
 
-      <MobileMapList slotA={slotA} slotB={slotB} onTap={onTap} />
-
-      <div className="map-scroll-hint">
-        <span className="scroll-hint-arrow">→</span>
-        <span>Scroll right to see all 32</span>
-      </div>
-
       <div className="map-legend" aria-label="Lens legend">
-        <div className="map-legend-label">The eight lenses</div>
-        <ul className="map-legend-list">
-          {TRAD_ORDER.map(tradId => (
-            <li key={tradId} className="map-legend-item">
-              <span className="map-legend-swatch" style={{ background: TRADITIONS[tradId].color }}></span>
-              <span className="map-legend-name">{TRADITIONS[tradId].label}</span>
-            </li>
-          ))}
-        </ul>
+        {TRAD_ORDER.map(tradId => (
+          <div key={tradId} className="map-legend-item">
+            <span className="map-legend-swatch" style={{ background: TRADITIONS[tradId].color }}></span>
+            <span className="map-legend-name">{TRADITIONS[tradId].label}</span>
+          </div>
+        ))}
       </div>
 
-      <div className="map-scroll map-svg-wrapper">
-        <svg viewBox={`0 0 ${VIEWBOX_W} ${VIEWBOX_H}`} className="map-svg">
-          {TRAD_ORDER.map(tradId => {
-            const list = stations.filter(s => s.tradition === tradId && !s.offsetY)
-              .sort((a,b) => a.x - b.x);
-            if (list.length === 0) return null;
-            const y = ROW_Y[tradId];
-            return (
-              <line key={tradId}
-                x1={list[0].x - 40} y1={y}
-                x2={list[list.length-1].x + 60} y2={y}
-                stroke={TRADITIONS[tradId].color}
-                strokeWidth={9} strokeLinecap="round" />
-            );
-          })}
-
-          {BRIDGES.map((b, i) => (
-            <line key={i}
-              x1={COL_X[b.col]} y1={ROW_Y[b.fromTrad]}
-              x2={COL_X[b.col]} y2={ROW_Y[b.toTrad]}
-              stroke="#14110D" strokeWidth={2.5} strokeDasharray="5 4" opacity={0.4} />
-          ))}
-
-          {stations.map(s => {
-            const trad = TRADITIONS[s.tradition];
-            const selected = s.id === slotA || s.id === slotB;
-            const slotLabel = s.id === slotA ? "A" : s.id === slotB ? "B" : null;
-            const hovered = s.id === hoveredId;
-            const isKind = !!s.kind;
-            const showPortrait = hasPortrait(s);
-            const portraitR = 22;
-            const dotR = isKind ? 5 : (s.interchange ? 11 : 7);
-            const r = showPortrait ? portraitR : dotR;
-            const clipId = `portrait-clip-${s.id}`;
-            return (
-              <g key={s.id} style={{ cursor: isKind ? "help" : "pointer" }}
-                onMouseEnter={() => onHover(s.id)}
-                onMouseLeave={() => onHover(null)}
-                onClick={() => onTap(s.id)}>
-                <rect x={s.x-44} y={s.y-portraitR-4} width={88} height={portraitR*2+8} fill="transparent" pointerEvents="all" />
-
-                {showPortrait ? (
-                  <>
-                    <defs>
-                      <clipPath id={clipId}>
-                        <circle cx={s.x} cy={s.y} r={portraitR} />
-                      </clipPath>
-                    </defs>
-                    <circle cx={s.x} cy={s.y} r={portraitR} fill="#FFFFFF" clipPath={`url(#${clipId})`} />
-                    <image
-                      href={portraitURL(s.id)}
-                      xlinkHref={portraitURL(s.id)}
-                      x={s.x - portraitR} y={s.y - portraitR}
-                      width={portraitR * 2} height={portraitR * 2}
-                      clipPath={`url(#${clipId})`}
-                      preserveAspectRatio="xMidYMid slice"
-                      onError={(e) => { e.currentTarget.style.display = "none"; }}
-                    />
-                    <circle cx={s.x} cy={s.y} r={portraitR}
-                      fill="none" stroke={trad.color}
-                      strokeWidth={selected ? 3 : (hovered ? 2.5 : 2)} />
-                  </>
-                ) : (
-                  <>
-                    {s.interchange && !isKind && (
-                      <circle cx={s.x} cy={s.y} r={dotR+5} fill="none" stroke={trad.color} strokeWidth={3} />
-                    )}
-                    {isKind ? (
-                      <circle cx={s.x} cy={s.y} r={4}
-                        fill="#FFFFFF" stroke={trad.color}
-                        strokeWidth={1} strokeDasharray="2 1.5" opacity={0.85} />
-                    ) : (
-                      <circle cx={s.x} cy={s.y} r={dotR}
-                        fill={s.ghost ? "#FFFFFF" : "#14110D"}
-                        stroke={s.ghost ? trad.color : "#14110D"}
-                        strokeWidth={s.ghost ? 2.5 : 2}
-                        strokeDasharray={s.ghost ? "3 2" : undefined} />
-                    )}
-                    {hovered && !selected && !isKind && (
-                      <circle cx={s.x} cy={s.y} r={dotR+6} fill="none" stroke={trad.color} strokeWidth={2} opacity={0.5} />
-                    )}
-                  </>
-                )}
-
-                {selected && (
-                  <>
-                    <circle cx={s.x} cy={s.y} r={r+8} fill="none" stroke="#FF4D2E" strokeWidth={3} opacity={0.9} />
-                    <rect x={s.x+r+8} y={s.y-9} width={20} height={18} fill="#FF4D2E" rx={3} />
-                    <text x={s.x+r+18} y={s.y+4} fill="#fff"
-                      fontFamily="Geist Mono, monospace"
-                      fontSize={11} fontWeight={700} textAnchor="middle">{slotLabel}</text>
-                  </>
-                )}
-
-                <text x={s.x} y={s.y - r - 8} fill={isKind ? trad.color : "#14110D"}
-                  fontFamily={isKind ? "Instrument Serif, serif" : "Geist, sans-serif"}
-                  fontSize={isKind ? 12 : 11}
-                  fontWeight={isKind ? 400 : 600}
-                  fontStyle={isKind ? "italic" : "normal"}
-                  textAnchor="middle"
-                  letterSpacing={isKind ? 0 : 0.5}
-                  opacity={isKind ? 0.75 : (hovered ? 1 : 0.92)}>
-                  {isKind ? `${s.first} ${s.last}` : (s.last.startsWith('&') ? `${s.first} ${s.last}` : s.last)}
-                </text>
-                <text x={s.x} y={s.y + r + 16} fill="#8B8576"
-                  fontFamily="Geist Mono, monospace"
-                  fontSize={9} textAnchor="middle" letterSpacing={0.5}>
-                  {s.year}
-                </text>
-              </g>
-            );
-          })}
-
-          {TRAD_ORDER.map(tradId => {
-            const list = stations.filter(s => s.tradition === tradId).sort((a,b)=>a.x-b.x);
-            if (list.length === 0) return null;
-            return (
-              <text key={`lbl-${tradId}`}
-                x={list[list.length-1].x + 80} y={ROW_Y[tradId]+5}
-                fill={TRADITIONS[tradId].color}
-                fontFamily="Geist Mono, monospace"
-                fontSize={11} fontWeight={600} letterSpacing={1.4}>
-                {TRADITIONS[tradId].label.toUpperCase()}
-              </text>
-            );
-          })}
-        </svg>
+      <div className="roster-grid">
+        {THINKERS.map(t => (
+          <FigureCard key={t.id} t={t}
+            selected={t.id === slotA || t.id === slotB}
+            slotLabel={t.id === slotA ? "A" : t.id === slotB ? "B" : null}
+            onSelect={onTap} />
+        ))}
       </div>
+    </section>
+  );
+}
 
-      {hoveredObj && (
-        <div className="map-hover-card" style={{ ['--trad']: TRADITIONS[hoveredObj.tradition].color }}>
-          {hasPortrait(hoveredObj) && (
-            <img src={portraitURL(hoveredObj.id)} alt=""
-              className="map-hover-portrait"
-              style={{ borderColor: TRADITIONS[hoveredObj.tradition].color }} />
-          )}
-          <div className="map-hover-meta">
-            {TRADITIONS[hoveredObj.tradition].label} · {hoveredObj.year}
+// Hover flips the card on desktop (free preview, no extra click) — clicking
+// either face always selects immediately, same as every other tap target in
+// this app. Touch has no hover, so tapping the card selects immediately too;
+// the small "i" is the only way to peek at the back without committing, so a
+// tap never becomes an ambiguous two-step (see the composition-screen bugs
+// this exact ambiguity caused previously).
+function FigureCard({ t, selected, slotLabel, onSelect }) {
+  const [peeked, setPeeked] = useState(false);
+  const trad = TRADITIONS[t.tradition];
+  const conf = getConfidence(t);
+  const portrait = hasPortrait(t);
+  const isKind = !!t.kind;
+  return (
+    <div
+      className={`card-flip-outer ${selected ? "is-selected" : ""} ${peeked ? "is-flipped" : ""} ${isKind ? "is-kind" : ""}`}
+      style={{ ['--trad']: trad.color }}
+      onClick={() => !isKind && onSelect(t.id)}
+    >
+      {slotLabel && <div className="card-slot-badge">{slotLabel}</div>}
+      {!isKind && (
+        <button className="card-peek-btn" aria-label={`Preview ${t.first} ${t.last}`}
+          onClick={(e) => { e.stopPropagation(); setPeeked(p => !p); }}>i</button>
+      )}
+      <div className="card-flip-inner">
+        <div className="card-face card-front">
+          <div className="card-photo">
+            {portrait && <img src={portraitURL(t.id)} alt=""
+              onError={(e) => { e.currentTarget.style.display = "none"; }} />}
           </div>
-          <div className="map-hover-name">
-            {hoveredObj.kind ? <em>{hoveredObj.first} {hoveredObj.last}</em> : `${hoveredObj.first} ${hoveredObj.last}`}
-          </div>
-          <p className="map-hover-bio">{hoveredObj.bio}</p>
-          <div className="map-hover-note">
-            {hoveredObj.kind
-              ? KIND_NOTES[hoveredObj.kind]
-              : CONFIDENCE_NOTES[getConfidence(hoveredObj)]}
+          <div className="card-meta">
+            <div className="card-trad">{trad.label}</div>
+            <div className="card-name">
+              {isKind ? <em>{t.first} {t.last}</em> : <>{t.first}<br/><strong>{t.last}</strong></>}
+            </div>
+            <div className="card-year">{t.year}</div>
           </div>
         </div>
-      )}
-    </section>
+        <div className="card-face card-back">
+          <p className="card-back-bio">{t.bio}</p>
+          <div className="card-back-foot">
+            {isKind ? KIND_NOTES[t.kind] : CONFIDENCE_NOTES[conf]}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -2937,59 +2805,6 @@ function ConfidenceNote({ conf, align }) {
           {CONFIDENCE_EXPLANATIONS[conf]}
         </div>
       )}
-    </div>
-  );
-}
-
-function MobileMapList({ slotA, slotB, onTap }) {
-  return (
-    <div className="map-list">
-      {TRAD_ORDER.map(tradId => {
-        const items = THINKERS.filter(t => t.tradition === tradId);
-        if (items.length === 0) return null;
-        const trad = TRADITIONS[tradId];
-        return (
-          <div key={tradId} className="map-list-section">
-            <div className="map-list-tradition" style={{ color: trad.color, borderBottomColor: trad.color }}>
-              {trad.label}
-            </div>
-            <ul className="map-list-items">
-              {items.map(t => {
-                const selected = t.id === slotA || t.id === slotB;
-                const slotLabel = t.id === slotA ? "A" : t.id === slotB ? "B" : null;
-                const conf = getConfidence(t);
-                const portrait = hasPortrait(t);
-                return (
-                  <li key={t.id} className={`map-list-item ${selected ? "is-selected" : ""} ${t.kind ? "is-kind" : ""}`}>
-                    <button
-                      onClick={() => onTap(t.id)}
-                      disabled={!!t.kind}
-                      className="map-list-btn"
-                      style={selected ? { background: "#FF4D2E", color: "#fff" } : {}}
-                    >
-                      {portrait && (
-                        <img src={portraitURL(t.id)} alt="" className="map-list-portrait" style={{ borderColor: trad.color }} />
-                      )}
-                      <div className="map-list-name">
-                        {t.kind ? <em>{t.first} {t.last}</em> : <strong>{t.first} {t.last}</strong>}
-                      </div>
-                      <div className="map-list-meta">
-                        <span>{t.year}</span>
-                        {t.kind ? (
-                          <span className="map-list-note">{KIND_NOTES[t.kind]}</span>
-                        ) : conf ? (
-                          <span className="map-list-note">{CONFIDENCE_NOTES[conf]}</span>
-                        ) : null}
-                      </div>
-                      {slotLabel && <div className="map-list-slot">{slotLabel}</div>}
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-        );
-      })}
     </div>
   );
 }
@@ -4134,45 +3949,20 @@ function GlobalStyle() {
       }
 
       .map-legend {
-        position: fixed;
-        bottom: 24px; left: 24px;
-        z-index: 30;
-        background: var(--paper);
-        border: 1.5px solid var(--ink);
-        border-radius: 8px;
-        padding: 14px 16px;
-        box-shadow: 3px 3px 0 var(--ink);
-        max-width: 240px;
-      }
-      .map-legend-label {
-        font-family: 'Geist Mono', monospace;
-        font-size: 10px; font-weight: 600;
-        letter-spacing: 0.16em; text-transform: uppercase;
-        color: var(--ink);
-        margin-bottom: 10px;
-      }
-      .map-legend-list {
-        list-style: none; padding: 0; margin: 0;
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 4px 12px;
+        display: flex; flex-wrap: wrap; gap: 14px;
+        max-width: 1280px; margin: 0 auto 24px;
       }
       .map-legend-item {
-        display: flex; align-items: center; gap: 7px;
+        display: flex; align-items: center; gap: 6px;
+        font-family: 'Geist Mono', monospace;
+        font-size: 10px; font-weight: 500;
+        letter-spacing: 0.1em; text-transform: uppercase;
+        color: var(--ink-quiet);
       }
       .map-legend-swatch {
         width: 10px; height: 10px;
         border-radius: 50%;
         flex: 0 0 auto;
-      }
-      .map-legend-name {
-        font-family: 'Geist', sans-serif;
-        font-size: 11px;
-        color: var(--ink-quiet);
-        line-height: 1.2;
-      }
-      @media (max-width: 900px) {
-        .map-legend { display: none; }
       }
       .map-prelude {
         display: flex; align-items: center; justify-content: space-between;
@@ -4232,143 +4022,100 @@ function GlobalStyle() {
       .map-begin-arrow { font-size: 18px; transition: transform 0.15s; }
       .map-begin-btn:hover .map-begin-arrow { transform: translateX(3px); }
 
-      .map-scroll-hint {
+      /* Card grid replacing the old subway-map SVG — see FigureCard. Grouped
+         visually by color (each card tinted by its own tradition) rather than
+         by section, so the whole roster reads as one continuous grid instead
+         of requiring horizontal scroll to see all thirty-two. */
+      .roster-grid {
+        display: grid;
+        grid-template-columns: repeat(6, 1fr);
+        gap: 18px;
         max-width: 1280px;
-        margin: 0 auto 12px;
-        display: inline-flex; align-items: center; gap: 8px;
-        font-family: 'Geist Mono', monospace;
-        font-size: 11px; font-weight: 500;
-        letter-spacing: 0.12em; text-transform: uppercase;
-        color: var(--accent);
-        padding: 6px 12px;
-        background: var(--paper);
-        border: 1px solid var(--accent);
-        border-radius: 100px;
-        animation: scrollHintBounce 1.6s ease-in-out infinite;
-      }
-      .scroll-hint-arrow { font-size: 14px; }
-      @keyframes scrollHintBounce {
-        0%, 100% { transform: translateX(0); }
-        50% { transform: translateX(6px); }
-      }
-
-      .map-scroll {
-        position: relative;
-        overflow-x: auto;
-        padding-bottom: 24px;
+        margin: 0 auto;
         animation: fadeIn 0.6s ease both;
-        -webkit-mask-image: linear-gradient(to right, black 0%, black 92%, transparent 100%);
-        mask-image: linear-gradient(to right, black 0%, black 92%, transparent 100%);
       }
-      .map-scroll::-webkit-scrollbar { height: 8px; }
-      .map-scroll::-webkit-scrollbar-thumb { background: rgba(20,17,13,0.18); border-radius: 4px; }
-      .map-svg { width: ${VIEWBOX_W}px; min-width: 1200px; height: auto; display: block; }
+      @media (max-width: 1100px) { .roster-grid { grid-template-columns: repeat(4, 1fr); } }
+      @media (max-width: 720px) { .roster-grid { grid-template-columns: repeat(3, 1fr); } .aoa-header { padding: 14px 20px; } }
+      @media (max-width: 480px) { .roster-grid { grid-template-columns: repeat(2, 1fr); } }
 
-      .map-hover-card {
-        position: fixed; top: 88px; right: 28px; width: 320px;
-        background: var(--paper);
+      .card-flip-outer {
+        perspective: 1200px;
+        aspect-ratio: 190 / 254;
+        cursor: pointer;
+        position: relative;
+      }
+      .card-flip-outer.is-kind { cursor: help; }
+      .card-flip-inner {
+        position: relative; width: 100%; height: 100%;
+        transition: transform 0.8s cubic-bezier(0.4, 0.2, 0.2, 1);
+        transform-style: preserve-3d;
+      }
+      .card-flip-outer.is-flipped .card-flip-inner,
+      .card-flip-outer:hover .card-flip-inner {
+        transform: rotateY(180deg);
+      }
+      .card-face {
+        position: absolute; inset: 0;
+        backface-visibility: hidden;
+        border: 1.5px solid var(--trad);
+        border-radius: 10px;
+        box-shadow: 4px 4px 0 var(--trad);
+        overflow: hidden;
+        display: flex; flex-direction: column;
+      }
+      .card-front { background: var(--paper); }
+      .card-back {
+        transform: rotateY(180deg);
+        justify-content: space-between;
+        padding: 14px;
+        color: var(--paper);
+        background: var(--trad);
+      }
+      .card-photo {
+        width: 100%; aspect-ratio: 1/1;
+        background: var(--bg-warm);
+        border-bottom: 3px solid var(--trad);
+        overflow: hidden;
+      }
+      .card-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+      .card-meta { padding: 9px 10px 10px; }
+      .card-trad {
+        font-family: 'Geist Mono', monospace;
+        font-size: 8px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+        color: var(--trad); margin-bottom: 3px;
+      }
+      .card-name { font-family: 'Instrument Serif', serif; font-size: 15px; line-height: 1.05; color: var(--ink); }
+      .card-name em { font-style: italic; color: var(--mid); }
+      .card-year { font-family: 'Geist Mono', monospace; font-size: 9px; color: var(--whisper); margin-top: 3px; }
+
+      .card-back-bio { font-family: 'Geist', sans-serif; font-size: 11.5px; line-height: 1.4; }
+      .card-back-foot {
+        font-family: 'Geist Mono', monospace;
+        font-size: 8.5px; letter-spacing: 0.04em; text-transform: uppercase;
+        border-top: 1px solid var(--paper); padding-top: 6px; margin-top: 8px;
+      }
+
+      .card-flip-outer.is-selected .card-face {
+        border-color: var(--accent);
+        box-shadow: 4px 4px 0 var(--accent);
+      }
+      .card-slot-badge {
+        position: absolute; top: 8px; right: 8px; z-index: 3;
+        width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: #fff;
+        display: flex; align-items: center; justify-content: center;
+        font-family: 'Geist Mono', monospace; font-size: 11px; font-weight: 700;
         border: 1.5px solid var(--ink);
-        border-top: 4px solid var(--trad);
-        border-radius: 6px;
-        padding: 22px 24px;
-        z-index: 50;
-        box-shadow: 4px 4px 0 var(--ink);
-        animation: fadeIn 0.2s ease both;
       }
-      .map-hover-portrait {
-        width: 80px; height: 80px;
-        border-radius: 50%;
-        border: 3px solid;
-        object-fit: cover;
-        margin-bottom: 14px;
-        background: var(--bg);
+      .card-peek-btn {
+        position: absolute; bottom: 8px; right: 8px; z-index: 3;
+        width: 22px; height: 22px; border-radius: 50%;
+        background: rgba(20,17,13,0.75); color: #fff; border: none;
+        font-family: 'Instrument Serif', serif; font-style: italic; font-size: 12px;
+        display: none; align-items: center; justify-content: center; cursor: pointer;
       }
-      .map-hover-meta {
-        font-family: 'Geist Mono', monospace;
-        font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase;
-        color: var(--trad);
-        margin-bottom: 6px;
-      }
-      .map-hover-name {
-        font-family: 'Instrument Serif', serif;
-        font-size: 28px; font-weight: 400;
-        line-height: 1.0;
-        margin-bottom: 12px;
-        letter-spacing: -0.02em;
-      }
-      .map-hover-bio {
-        font-family: 'Geist', sans-serif;
-        font-size: 13px; line-height: 1.55;
-        color: var(--ink-quiet);
-        margin: 0;
-      }
-      .map-hover-note {
-        margin-top: 14px; padding-top: 12px;
-        border-top: 1px solid var(--rule);
-        font-family: 'Geist Mono', monospace;
-        font-size: 10px;
-        letter-spacing: 0.1em; text-transform: uppercase;
-        color: var(--mid);
-      }
-
-      .map-list { display: none; max-width: 720px; margin: 0 auto; }
-      .map-list-section { margin-bottom: 32px; }
-      .map-list-tradition {
-        font-family: 'Geist Mono', monospace;
-        font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase;
-        font-weight: 700;
-        padding-bottom: 10px; margin-bottom: 12px;
-        border-bottom: 2px solid;
-      }
-      .map-list-items { list-style: none; padding: 0; margin: 0; }
-      .map-list-item { border-bottom: 1px solid var(--rule); }
-      .map-list-btn {
-        display: flex; align-items: center; gap: 14px;
-        width: 100%; background: none; border: none;
-        padding: 14px 12px; cursor: pointer;
-        font-family: inherit; color: var(--ink); text-align: left;
-        transition: background 0.15s;
-      }
-      .map-list-btn:not(:disabled):hover { background: rgba(20,17,13,0.04); }
-      .map-list-btn:disabled { cursor: default; opacity: 0.55; }
-      .map-list-portrait {
-        width: 44px; height: 44px;
-        border-radius: 50%;
-        border: 2px solid;
-        object-fit: cover;
-        flex: 0 0 auto;
-      }
-      .map-list-name {
-        font-family: 'Geist', sans-serif; font-size: 15px;
-        flex: 1 1 auto;
-      }
-      .map-list-name strong { font-weight: 600; letter-spacing: -0.005em; }
-      .map-list-name em { font-weight: 400; font-style: italic; color: var(--mid); }
-      .map-list-meta {
-        text-align: right; flex: 0 0 auto;
-        display: flex; flex-direction: column; align-items: flex-end; gap: 2px;
-      }
-      .map-list-meta > span:first-child {
-        font-family: 'Geist Mono', monospace;
-        font-size: 11px; color: var(--mid);
-      }
-      .map-list-note {
-        font-family: 'Geist Mono', monospace;
-        font-size: 9px; color: var(--whisper);
-        letter-spacing: 0.08em; text-transform: uppercase;
-      }
-      .map-list-slot {
-        flex: 0 0 auto;
-        font-family: 'Geist Mono', monospace;
-        font-size: 11px; font-weight: 700; color: #fff;
-        background: var(--ink); padding: 2px 8px;
-        border-radius: 3px;
-      }
-
-      @media (max-width: 720px) {
-        .map-svg-wrapper { display: none; }
-        .map-list { display: block; }
-        .aoa-header { padding: 14px 20px; }
+      @media (hover: none) {
+        .card-peek-btn { display: flex; }
+        .card-flip-outer:hover .card-flip-inner { transform: none; }
       }
 
       /* ---- Confidence tooltip ---- */
