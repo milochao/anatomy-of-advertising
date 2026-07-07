@@ -767,11 +767,21 @@ ${instruction}`;
     // it with an ellipsis (the old wrapCapped(debateTopic, 38, 3)) meant the
     // single piece of context a cold reader gets was routinely incomplete.
     // Same fix as the quote blocks: shrink the font before ever truncating.
-    // The only fixed downstream element is the winner name at y=776, so the
-    // budget below just needs to clear that with margin.
+    //
+    // The budget here is NOT just "stay clear of the winner name at y=776" —
+    // a free-text topic (the composition screen's topic input has no length
+    // limit at all, so a user can paste in a whole paragraph) can be far
+    // longer than anything the auto-generated "under 20 words" topic ever
+    // produces. An earlier version of this budget only checked for literal
+    // collision with y=776 and let a 12-line pasted paragraph shrink-to-fit
+    // right up against it — technically no overlapping pixels, but it left
+    // almost none of the card's original ~350px "photo, then name" breathing
+    // room, so the portrait, name, and quote all read as cramped/broken even
+    // though nothing literally collided. The cap below preserves that
+    // breathing room by design, not just by accident of what fits.
     const TOPIC_START_Y = 96;
     const { fontSize: topicFontSize, lines: topicLines, lineH: topicLineH } = fitQuoteBlock(debateTopic, {
-      maxWidth: 968, maxHeight: 776 - TOPIC_START_Y - 60, maxFontSize: 36, minFontSize: 22,
+      maxWidth: 968, maxHeight: 300, maxFontSize: 36, minFontSize: 22,
       lineHeightRatio: 1.28,
     });
     const topicSVG = topicLines.map((l, i) =>
